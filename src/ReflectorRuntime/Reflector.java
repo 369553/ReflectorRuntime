@@ -434,6 +434,10 @@ public class Reflector{
             String preText = (targetMethodType == METHOD_TYPES.GET ? "get" : "set");
             return preText + convertFirstLetterToUpper(nameOfAttribute);
         }
+        else if(codingStyle == CODING_STYLE.SNAKE_CASE){
+            String preText = (targetMethodType == METHOD_TYPES.GET ? "get" : "set");
+            return preText + "_" + nameOfAttribute.toLowerCase(Locale.ENGLISH);
+        }
         return null;
     }
     private Class<?> getEnumClass(String className){
