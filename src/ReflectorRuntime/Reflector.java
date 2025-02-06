@@ -19,7 +19,7 @@ import java.util.Map;
  * Çalışma zamânında sınıf örneği (nesne) oluşturma,
  * dizi oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 1.0.0
+ * @version 1.0.1
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -258,12 +258,12 @@ public class Reflector{
             return null;
         }
     }
-    // enum değer için 'get' yöntemi aranmıyor; yanî enum değerin public olması isteniyor
-    // basit enum değerler için çalışır
-    // Bu sürümdeparametresiz yapıcı yöntemi bulunmayan sınıflar için çalışmaz.
     /**
-     * İlgili
-     * @param <T> Örneği istenen sınıf
+     * Verilen değerleri verilen sınıftaki nesneye zerk ederek nesne üretmeye çalışır.
+     * Bu sürümde parametresiz yapıcı yöntemi bulunmayan sınıfların örneği üretilemiyor.
+     * {@code enum} değerler için "getter" erişim yöntemi aranmıyor; yanî enum değerin
+     * gizli olmaması lazım.
+     * @param <T> Sınıf örneği istenen sınıf
      * @param targetClass Örneği istenen sınıf
      * @param data Sınıfın nesnesi oluşturulurken zerk edilmesi istenen özellik değerleri
      * @param codeStyleNeededOnSearchMethod Sınıfın 'setter' yöntemleri aranması durumunda,
@@ -319,17 +319,19 @@ public class Reflector{
                         }
                     }
                }
-                if(tryToForceCastForParameterType){
+                if(tryToForceCastForParameterType && value != null){
                     if(value.getClass() != fl.getType()){// Hedef özelliğin veri tipi ile verilen değerin veri tipi aynı değilse!
-                        // Hedef özelliğin veri tipine çevirmeye çalış:
-                        try{
-    //                        System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
-                            Object castedValue = fl.getType().cast(value);
-                            value = castedValue;
-                        }
-                        catch(ClassCastException flCastException){
-                            System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
-                            //Buraya continue; yazmıyorum; çünkü belki 'setter' yöntemi bu veri tipinden değişkeni parametre olarak kabûl ediyordur
+                        if(!value.getClass().isPrimitive() && !fl.getType().isPrimitive()){
+                            // Hedef özelliğin veri tipine çevirmeye çalış:
+                            try{
+        //                        System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
+                                Object castedValue = fl.getType().cast(value);
+                                value = castedValue;
+                            }
+                            catch(ClassCastException flCastException){
+                                System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
+                                //Buraya continue; yazmıyorum; çünkü belki 'setter' yöntemi bu veri tipinden değişkeni parametre olarak kabûl ediyordur
+                            }
                         }
                     }
                 }
