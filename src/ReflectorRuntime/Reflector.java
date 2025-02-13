@@ -1,7 +1,5 @@
 package ReflectorRuntime;
 
-import java.io.File;
-import java.io.FileReader;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -16,14 +14,15 @@ import java.util.Map;
 /**
  * 
  * @author Mehmet Âkif SOLAK
- * Çalışma zamânında sınıf örneği (nesne) oluşturma,
- * dizi oluşturma gibi ihtiyaçların karşılanmasına yönelik
+ * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
+ * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 1.0.1
+ * @version 2.0.0
  */
 public class Reflector{
     private static Reflector serv;// service
     private HashMap<Class, Class> mapOfPrimitiveToWrapper;
+    private HashMap<Class, Method> numberMethods;
 
     /**
      * 'getter' ve/veyâ 'setter' yöntemlerinin sınıf içerisinde
@@ -82,29 +81,6 @@ public class Reflector{
         }
         catch(ClassCastException | NegativeArraySizeException | IllegalArgumentException | NullPointerException exc){
             System.err.println("İstenen sınıfta bir dizi oluşturulamadı : " + exc.toString());
-            return null;
-        }
-    }
-    /**
-     * 
-     * @param <T> İstenen nesnenin tipi
-     * @param classOfDataArray Dizisi istenen nesnenin sınıfı
-     * @param length İstenen dizi uzunluğu
-     * @param data Dizi elemanlarını belirten liste
-     * @return Verilen değerler diziye atanmış olarak istenen tipte dizi
-     * nesne formunda döndürülür veyâ {@code null} döndürülür.
-     */
-    public <T> T produceNewArrayInjectDataReturnAsObject(Class<T> classOfDataArray, int length, List data){
-        try{
-            Object value = Array.newInstance(classOfDataArray.getComponentType(), length);
-            for(int sayac = 0; sayac < data.size(); sayac++){
-                Array.set(value, sayac, data.get(sayac));
-            }
-            ".".split("\\.");
-            return classOfDataArray.cast(value);
-        }
-        catch(NegativeArraySizeException | IllegalArgumentException | NullPointerException | ArrayIndexOutOfBoundsException exc){
-            System.err.println("Verilen verilerle istenen sınıfta bir dizi oluşturulamadı : " + exc.toString());
             return null;
         }
     }
@@ -179,10 +155,100 @@ public class Reflector{
         return obj;
     }
     /**
-     * 
+     * Verilen bilgilerle boyut bağımsız dizi oluşturun
+     * @param <T> Hedef dizi sınıfını belirten tip
+     * @param classOfDataArray Hedef sınıf, misal {@code int[][].class} gibi..
+     * @param data Veri {@code List} veyâ dizi ({@code Array}) biçiminde olmalı
+     * @return İstenen verilerin zerk edildiği dizi örneği veyâ {@code null}
+     */
+    public <T> T produceNewArrayInjectDataReturnAsObject(Class<T> classOfDataArray, Object data){// Hedef diziye dönüştürme, derinlik bağımsız
+        if(data == null)
+           return null;
+        boolean isDataAnArray = false;
+        try{// Veri dizi veyâ liste biçiminde olmalıdır:
+            if(!data.getClass().isArray()){
+                List li = (List) data;
+                if(li == null)
+                    return null;
+            }
+            else
+                isDataAnArray = true;
+        }
+        catch(ClassCastException exc){
+            System.err.println("Yalnızca List ve dizi biçimindeki veriler kabûl ediliyor.");
+            return null;
+        }
+        try{
+            int dimension = (isDataAnArray ? getDimensionOfArray(classOfDataArray) : getDimensionOfList((List) data));
+            boolean dimensionIsEqualOne = (dimension == 1);
+            int len = (isDataAnArray ? Array.getLength(data) : ((List) data).size());
+            Object value = Array.newInstance(classOfDataArray.getComponentType(), len);
+            for(int sayac = 0; sayac < len; sayac++){
+                Object element = (isDataAnArray ? Array.get(data, sayac) : ((List) data).get(sayac));
+                if(element == null && dimensionIsEqualOne && classOfDataArray.getComponentType().isPrimitive())// Temel veri tipine doğrudan null değeri atanamaz
+                    continue;
+                if(dimensionIsEqualOne)
+                    Array.set(value, sayac, element);
+                else
+                    Array.set(value, sayac,
+                        produceNewArrayInjectDataReturnAsObject(classOfDataArray.getComponentType(),
+                            element));
+            }
+            return (T) value;
+        }
+        catch(IllegalArgumentException | ClassCastException exc){
+            System.err.println("exc : " + exc.toString());
+        }
+        return null;
+    }
+    /**
+     * Verilen verilerle boyut bağımsız liste oluşturun
+     * @param data Veri {@code List} veyâ dizi ({@code Array}) biçiminde olmalı
+     * @return İstenen verilerin zerk edildiği liste veyâ {@code null}
+     */
+    public List produceNewInjectedList(Object data){
+        if(data == null)
+           return null;
+        boolean isDataAnArray = false;
+        try{// Veri dizi veyâ liste biçiminde olmalıdır:
+            if(!data.getClass().isArray()){
+                List li = (List) data;
+                if(li == null)
+                    return null;
+            }
+            else
+                isDataAnArray = true;
+        }
+        catch(ClassCastException exc){
+            System.err.println("Yalnızca List ve dizi biçimindeki veriler kabûl ediliyor.");
+            return null;
+        }
+        List value = new ArrayList();
+        try{
+            int len = (isDataAnArray ? Array.getLength(data) : ((List) data).size());
+            if(len == 0)
+                return value;
+            int dimension = (isDataAnArray ? getDimensionOfArray(data.getClass()) : getDimensionOfList((List) data));
+            boolean dimensionIsEqualOne = (dimension == 1);
+            for(int sayac = 0; sayac < len; sayac++){
+                Object element = (isDataAnArray ? Array.get(data, sayac) : ((List) data).get(sayac));
+                if(dimensionIsEqualOne)
+                    value.add(sayac, element);
+                else
+                    value.add(sayac, produceNewInjectedList(element));
+            }
+            return value;
+        }
+        catch(IllegalArgumentException exc){
+            System.err.println("exc : " + exc.toString());
+        }
+        return null;
+    }
+    /**
+     * Sarmalayıcı sınıftan temel veri tipini elde edin
      * @param wrapperClass Sarmalayıcı sınıf
      * @return Sarmalayıcı sınıfın karşılığı olan temel {@code "primitive"}
-     * sınıf veyâ null döndürülür.
+     * sınıf veyâ null döndürülür
      */
     public Class getPrimitiveClassFromWrapper(Class wrapperClass){
         Class value = null;
@@ -195,7 +261,7 @@ public class Reflector{
         return value;
     }
     /**
-     * 
+     * Temel veri tipinden sarmalayıcı sınıfı elde edin
      * @param primitiveClass Sarmalayıcısı istenen temel veri tipinin sınıfı
      * @return Verilen temel veri tipi sınıfının sarmalayıcısı veyâ {@code null}
      */
@@ -203,8 +269,8 @@ public class Reflector{
         return getMapOfPrimitiveToWrapper().get(primitiveClass);
     }
     /**
-     * 
-     * @param cls Sınıf
+     * Verilen sınıfın parametresiz yapıcı yöntemini arar
+     * @param cls Hedef ssınıf
      * @return Verilen sınıfın parametresiz yapıcı yöntemi veyâ {@code null}
      */
     public Constructor findConstructorForNoParameter(Class cls){
@@ -220,7 +286,7 @@ public class Reflector{
         return null;
     }
     /**
-     * 
+     * Metîn biçiminde depolanan farklı veri tiplerindeki veriyi dönüştürür
      * @param <T> Dönüşüm yapılması istenen sınıf tipi
      * @param data Metîn hâlinde bulunan veri
      * @param target Verilen verinin dönüştürülmesi istenen veri tipi
@@ -259,21 +325,87 @@ public class Reflector{
         }
     }
     /**
-     * Verilen değerleri verilen sınıftaki nesneye zerk ederek nesne üretmeye çalışır.
-     * Bu sürümde parametresiz yapıcı yöntemi bulunmayan sınıfların örneği üretilemiyor.
-     * {@code enum} değerler için "getter" erişim yöntemi aranmıyor; yanî enum değerin
-     * gizli olmaması lazım.
+     * Verilen veriyi hedef sınıftaki nesneye zerk ederek nesne üretmeye çalışır
+     * Şu an parametresiz yapıcı yöntemi bulunmayan sınıfın örneği üretilemiyor
+     * {@code enum} değerler için "getter" erişim yöntemi aranmıyor; yanî enum 
+     * değerin gizli olmaması lazım.
      * @param <T> Sınıf örneği istenen sınıf
      * @param targetClass Örneği istenen sınıf
-     * @param data Sınıfın nesnesi oluşturulurken zerk edilmesi istenen özellik değerleri
-     * @param codeStyleNeededOnSearchMethod Sınıfın 'setter' yöntemleri aranması durumunda,
-     * 'getter' yöntem isminin hangi kodlama standardına göre aranacağı bilgisi
-     * @param tryToForceCastForParameterType Sınıfın bir özelliğinin veri tipi, verilen
-     * sınıf 'data' haritasındaki ilgili elemanın veri tipiyle uyuşmazsa
-     * hedef veri tipine dönüştürmeye ('casting') çalışılmasını ifâde eden bayrak
-     * @return Sınıf örneği (Özellik (field) değerleri zerk edilmiş nesne)
+     * @param data Sınıfın örneğine zerk edilmesi istenen özellik değerleri
+     * @param codeStyleNeededOnSearchMethod 'setter' yöntemine ihtiyaç duyulması
+     * durumunda bu yöntemin hangi kodlama standardına göre aranacağı bilgisi
+     * @return Verilen verilerin zerk edildiği sınıf örneği veyâ {@code null}
      */
-    public <T> T pruduceNewInjectedObject(Class<T> targetClass, Map<String, Object> data, CODING_STYLE codeStyleNeededOnSearchMethod, boolean tryToForceCastForParameterType/*, boolean isIncludeNoParameterConstructor, List<Object> parameterForConstructor*/){
+    public <T> T pruduceNewInjectedObject(Class<T> targetClass, Map<String, Object> data, CODING_STYLE codeStyleNeededOnSearchMethod){
+        return pruduceNewInjectedObject(targetClass, data, codeStyleNeededOnSearchMethod, true);
+    }
+    /**
+     * Verilen dizi sınıfına bakarak dizi boyutunu döndürür
+     * @param cls Dizi sınıfı, misal {@code int[][].class} gibi..
+     * @return Dizi boyutu, sınıf dizi sınıfı değilse veyâ {@code null} ise 0
+     */
+    public int getDimensionOfArray(Class cls){
+        if(cls == null)
+            return 0;
+        return (cls.getTypeName().split("\\[").length - 1);
+    }
+    /**
+     * Verilen listenin elemanlarını tarayarak listenin derînliğini araştırır
+     * Eğer dizi elemanı bir liste ise, derinlik bir arttırılır ve o da taranır
+     * @param list Liste
+     * @return Listenin derînliği, liste {@code null} ise {@code 0} döndürülür
+     */
+    public int getDimensionOfList(List list){
+        if(list == null)
+            return 0;
+        return findDepthWhole(list, 1);
+    }
+    // ARKAPLAN İŞLEM YÖNTEMLERİ:
+    /**
+     * Verilen listenin elemanlarını tarayarak listenin derînliğini araştırır
+     * Eğer dizi elemanı bir liste ise, derinlik bir arttırılır ve o da taranır
+     * @param list Liste
+     * @param depth Derinlik, yöntemi çağırırken {@code 1} değeri verilmeli
+     * @return Listenin derînliği, liste {@code null} ise {@code 0} döndürülür
+     */
+    private int findDepthWhole(List list, int depth){
+        if(list == null)
+            return 0;
+        int len = list.size();
+        if(len <= 0)
+            return depth;
+        int[] lengths = new int[len];
+        for(int sayac = 0; sayac < len; sayac++){
+            Object element = list.get(sayac);
+            if(element == null)
+                lengths[sayac] = depth;
+            else if(list.get(sayac) instanceof List)
+                lengths[sayac] = findDepthWhole((List) list.get(sayac), depth + 1);
+            else
+                lengths[sayac] = depth;
+        }
+        int max = lengths[0];
+        for(int sayac = 1; sayac < len; sayac++){
+            if(lengths[sayac] > lengths[sayac - 1])
+                max = lengths[sayac];
+        }
+        return max;
+    }
+    /**
+     * Verilen veriyi hedef sınıftaki nesneye zerk ederek nesne üretmeye çalışır
+     * Şu an parametresiz yapıcı yöntemi bulunmayan sınıfın örneği üretilemiyor
+     * {@code enum} değerler için "getter" erişim yöntemi aranmıyor; yanî enum 
+     * değerin gizli olmaması lazım.
+     * @param <T> Sınıf örneği istenen sınıf
+     * @param targetClass Örneği istenen sınıf
+     * @param data Sınıfın örneğine zerk edilmesi istenen özellik değerleri
+     * @param tryToForceCastForParameterType Özelliğin veri tipi uyuşmadığında,
+     * dönüşüm için ek yöntem uygulanmasını istiyorsanız {@code true} yapın
+     * @param codeStyleNeededOnSearchMethod 'setter' yöntemine ihtiyaç duyulması
+     * durumunda bu yöntemin hangi kodlama standardına göre aranacağı bilgisi
+     * @return Verilen verilerin zerk edildiği sınıf örneği veyâ {@code null}
+     */
+    private <T> T pruduceNewInjectedObject(Class<T> targetClass, Map<String, Object> data, CODING_STYLE codeStyleNeededOnSearchMethod, boolean tryToForceCastForParameterType/*, boolean isIncludeNoParameterConstructor, List<Object> parameterForConstructor*/){
         try{// Hedef veri tipinin uygunluğunu kontrol et
             if(!checkTargetClassForInjection(targetClass))
                 return null;
@@ -324,12 +456,14 @@ public class Reflector{
                         if(!value.getClass().isPrimitive() && !fl.getType().isPrimitive()){
                             // Hedef özelliğin veri tipine çevirmeye çalış:
                             try{
-        //                        System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
                                 Object castedValue = fl.getType().cast(value);
                                 value = castedValue;
                             }
                             catch(ClassCastException flCastException){
                                 System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
+                                Object convertedValue = checkAndConvertListAndArray(value, fl);
+                                if(convertedValue != null)
+                                    value = convertedValue;
                                 //Buraya continue; yazmıyorum; çünkü belki 'setter' yöntemi bu veri tipinden değişkeni parametre olarak kabûl ediyordur
                             }
                         }
@@ -339,25 +473,26 @@ public class Reflector{
                     fl.set(obj, value);// Basit zerk : Erişim izni olmayan alanlar için çalışmaz!
                 }
                 catch(IllegalAccessException | IllegalArgumentException excOnBasicInjection){// Hedef özelliğe doğrudan erişim izni yok veyâ parametrenin veri tipi uyuşmuyor, diğer yöntemleri dene
-//                    System.err.println("exc : " + exc.toString());
+//                    System.err.println("exc : " + excOnBasicInjection.toString());
                     // Veriyi hedef özelliğe zerk edebilmek için 'setter' yöntemi ara:
                     String methodName = getMethodNameDependsCodeStyle(fl.getName(), codeStyleNeededOnSearchMethod, METHOD_TYPES.SET);
-                    ArrayList<Method> getters = new ArrayList<Method>();
+                    ArrayList<Method> setters = new ArrayList<Method>();
                     try{
                         for(Method m : targetClass.getDeclaredMethods()){
                             if(m.getName().equals(methodName))
-                                getters.add(m);
+                                setters.add(m);
                         }
                     }
                     catch(SecurityException excOnTakingMethods){
                         System.err.println("Sınıfın yöntem isimleri alınamadı : " + excOnTakingMethods.toString());
                         continue;
                     }
-                    if(getters.isEmpty())
+                    if(setters.isEmpty())
                         continue;
-                    for(int index = 0; index < getters.size(); index++){
+                    for(int index = 0; index < setters.size(); index++){
                         try{
-                            getters.get(index).invoke(obj, value);
+                            setters.get(index).invoke(obj, value);
+                            System.out.println("valeu : " + value);
                             break;// Başka 'setter' yöntemi varsa onları uygulamaya çalışma!
                         }
                         catch(SecurityException excOnInvokingSetter){
@@ -381,7 +516,6 @@ public class Reflector{
         }
         return obj;
     }
-    // ARKAPLAN İŞLEM YÖNTEMLERİ:
     private String getParameterForConstructorOfWrapperBasicClass(Class cls){
         String param = null;
         if(cls.equals(Integer.class))
@@ -452,6 +586,44 @@ public class Reflector{
             return null;
         }
     }
+    private Object checkAndConvertListAndArray(Object value, Field target){
+        // İki soruna çözüm aranıyor:
+        // 1) value = List ve element = Array ise uyumluluk arayıp, atama yapma
+        // 2) value = Array ve element = List ise, uyumluluk arayıp, atama yapma
+        if(value == null || target == null)
+            return null;
+        boolean isValueAnArray = value.getClass().isArray();
+        boolean isTargetAnArray = target.getType().isArray();
+        boolean isValueAnList = false;
+        boolean isTargetAnList = false;
+        if(!isValueAnArray){
+            if(value instanceof List)
+                isValueAnList = true;
+        }
+        if(!isTargetAnArray){
+            try{
+                Class casted = target.getType().asSubclass(List.class);
+                if(casted != null)
+                    isTargetAnList = true;
+            }
+            catch(ClassCastException exc){
+                System.err.println("exc : " + exc.toString());
+                isTargetAnList = false;
+            }
+        }
+        if((!isTargetAnArray && !isTargetAnList) || (!isValueAnArray && !isValueAnList))
+            return null;// Taraflardan herhangi birisi hem liste, hem de dizi değilse "null" döndür
+        if(isTargetAnArray){// Hedef bir dizi ise..
+            int dimensionOfTarget = getDimensionOfArray(target.getType());// Hedef dizinin boyutu
+            int dimensionOfValue = findDepthWhole((List) value, 1);// Veri dizisinin boyutu
+            if(dimensionOfValue > dimensionOfTarget)// Hedef ile veri arasında dizi boyutu uyuşmazlığı var
+                return null;
+            return produceNewArrayInjectDataReturnAsObject(target.getType(), value);
+        }
+        else{// Hedef bir liste ise...
+            return produceNewInjectedList(value);
+        }
+    }
 
 // ERİŞİM YÖNTEMLERİ:
     //ANA ERİŞİM YÖNTEMİ
@@ -478,5 +650,41 @@ public class Reflector{
             mapOfPrimitiveToWrapper.put(byte.class, Byte.class);
         }
         return mapOfPrimitiveToWrapper;
+    }
+    private HashMap<Class, Method> getNumberMethods(){
+        if(numberMethods == null){
+            numberMethods = new HashMap<Class, Method>();
+            Class numberClass = Number.class;
+            try{
+                Method m = Number.class.getDeclaredMethod("doubleValue", null);
+                numberMethods.put(double.class, m);
+                numberMethods.put(Double.class, m);
+                
+                m = numberClass.getDeclaredMethod("intValue", null);
+                numberMethods.put(int.class, m);
+                numberMethods.put(Integer.class, m);
+                
+                m = numberClass.getDeclaredMethod("floatValue", null);
+                numberMethods.put(float.class, m);
+                numberMethods.put(Float.class, m);
+                
+                m = numberClass.getDeclaredMethod("shortValue", null);
+                numberMethods.put(short.class, m);
+                numberMethods.put(Short.class, m);
+                
+                m = numberClass.getDeclaredMethod("longValue", null);
+                numberMethods.put(long.class, m);
+                numberMethods.put(Long.class, m);
+                Number ms;
+                
+                m = numberClass.getDeclaredMethod("byteValue", null);
+                numberMethods.put(byte.class, m);
+                numberMethods.put(Byte.class, m);
+            }
+            catch(NoSuchMethodException | SecurityException exc){
+                System.err.println("Number sınıfı yöntemleri alınamadı");
+            }
+        }
+        return numberMethods;
     }
 }
