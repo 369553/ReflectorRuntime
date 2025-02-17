@@ -17,12 +17,13 @@ import java.util.Map;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.0
+ * @version 2.0.1
  */
 public class Reflector{
     private static Reflector serv;// service
     private HashMap<Class, Class> mapOfPrimitiveToWrapper;
     private HashMap<Class, Method> numberMethods;
+    private final List<String> basicDataTypes = getBasicDataTypes();
 
     /**
      * 'getter' ve/veyâ 'setter' yöntemlerinin sınıf içerisinde
@@ -360,7 +361,55 @@ public class Reflector{
             return 0;
         return findDepthWhole(list, 1);
     }
-    // ARKAPLAN İŞLEM YÖNTEMLERİ:
+    /**
+     * Verilen sınıfın özelliklerini alır ve {@code Map} tipinde döndürür.
+     * @param obj Özellik değerleri istenen nesne
+     * @param codingStyleForGetMethods Özellikleri almak için gerekebilecek
+     * 'getter' yöntemlerinin isminin belirlenmesi için kullanılan kodlama tipi
+     * @return Verilen nesnenin özellikleri yâ dâ {@code null}
+     */
+    public Map<String, Object> getFieldValuesBasicly(Object obj, Reflector.CODING_STYLE codingStyleForGetMethods){
+        if(obj == null)
+            return null;
+        Field[] fields = null;
+        Map<String, Object> result = new HashMap<String, Object>();
+        try{
+            fields = obj.getClass().getDeclaredFields();
+            for(Field fl : fields){
+                Object value = null;
+                try{
+                    value = fl.get(obj);
+                }
+                catch(IllegalArgumentException | IllegalAccessException excOnTakingFieldValue){
+                    System.err.println("excOnTakingFieldValue : " + excOnTakingFieldValue);
+                    String getMethodName = getMethodNameDependsCodeStyle(fl.getName(), codingStyleForGetMethods, METHOD_TYPES.GET);
+                    try{
+                        Method m = obj.getClass().getMethod(getMethodName, null);
+                        if(m != null){
+                            value = m.invoke(obj, null);
+                        }
+                    }
+                    catch(IllegalAccessException | IllegalArgumentException | InvocationTargetException | NoSuchMethodException excOnInvokingGetMethod){
+                        System.err.println("excOnTakingInvokingGetMethod : " + excOnTakingFieldValue.toString());
+                        continue;
+                    }
+                }
+                result.put(fl.getName(), value);
+            }
+        }
+        catch(SecurityException exc){
+            System.err.println("exc : " + exc.toString());
+            return null;
+        }
+        return result;
+    }
+    public boolean isDataTypeBasic(String dataTypeName){
+        for(String s : this.basicDataTypes){
+            if(s.equals(dataTypeName))
+                return true;
+        }
+        return false;
+    }
     /**
      * Verilen listenin elemanlarını tarayarak listenin derînliğini araştırır
      * Eğer dizi elemanı bir liste ise, derinlik bir arttırılır ve o da taranır
@@ -368,7 +417,7 @@ public class Reflector{
      * @param depth Derinlik, yöntemi çağırırken {@code 1} değeri verilmeli
      * @return Listenin derînliği, liste {@code null} ise {@code 0} döndürülür
      */
-    private int findDepthWhole(List list, int depth){
+    public int findDepthWhole(List list, int depth){
         if(list == null)
             return 0;
         int len = list.size();
@@ -391,6 +440,71 @@ public class Reflector{
         }
         return max;
     }
+    /**
+     * Liste veyâ dizi şeklindeki bir alana doğrudan zerk edilemeyen liste veyâ
+     * dizi şeklindeki bir veriyi zerk edebilmek için gereken dönüşümü yapar
+     * @param value Hedef alana zerk edilmek istenen veri, liste veyâ dizi
+     * @param target Hedef alan
+     * @return Hedef alan ile uyumlu biçimdeki veri veyâ {@code null}
+     */
+    public Object checkAndConvertListAndArray(Object value, Field target){
+        // İki soruna çözüm aranıyor:
+        // 1) value = List ve element = Array ise uyumluluk arayıp, atama yapma
+        // 2) value = Array ve element = List ise, uyumluluk arayıp, atama yapma
+        if(value == null || target == null)
+            return null;
+        boolean isValueAnArray = value.getClass().isArray();
+        boolean isTargetAnArray = target.getType().isArray();
+        boolean isValueAnList = false;
+        boolean isTargetAnList = false;
+        if(!isValueAnArray){
+            if(value instanceof List)
+                isValueAnList = true;
+        }
+        if(!isTargetAnArray){
+            try{
+                Class casted = target.getType().asSubclass(List.class);
+                if(casted != null)
+                    isTargetAnList = true;
+            }
+            catch(ClassCastException exc){
+                System.err.println("exc : " + exc.toString());
+                isTargetAnList = false;
+            }
+        }
+        if((!isTargetAnArray && !isTargetAnList) || (!isValueAnArray && !isValueAnList))
+            return null;// Taraflardan herhangi birisi hem liste, hem de dizi değilse "null" döndür
+        if(isTargetAnArray){// Hedef bir dizi ise..
+            int dimensionOfTarget = getDimensionOfArray(target.getType());// Hedef dizinin boyutu
+            int dimensionOfValue = findDepthWhole((List) value, 1);// Veri dizisinin boyutu
+            if(dimensionOfValue > dimensionOfTarget)// Hedef ile veri arasında dizi boyutu uyuşmazlığı var
+                return null;
+            return produceNewArrayInjectDataReturnAsObject(target.getType(), value);
+        }
+        else{// Hedef bir liste ise...
+            return produceNewInjectedList(value);
+        }
+    }
+    /**
+     * İsmi verilen bir özelliğin ('attribute') 'getter' veyâ 'setter' yöntem
+     * ismini döndürür
+     * @param nameOfAttribute Özelliğin ismi
+     * @param codingStyle İlgili yöntemin kodlanırken kullanılan kod biçimi
+     * @param targetMethodType İsmi istenen yöntem tipi{@code GET} | {@code SET}
+     * @return Hedef yöntemin ismi veyâ {@code null}
+     */
+    public String getMethodNameDependsCodeStyle(String nameOfAttribute, CODING_STYLE codingStyle, METHOD_TYPES targetMethodType){
+        if(codingStyle == CODING_STYLE.CAMEL_CASE){
+            String preText = (targetMethodType == METHOD_TYPES.GET ? "get" : "set");
+            return preText + convertFirstLetterToUpper(nameOfAttribute);
+        }
+        else if(codingStyle == CODING_STYLE.SNAKE_CASE){
+            String preText = (targetMethodType == METHOD_TYPES.GET ? "get" : "set");
+            return preText + "_" + nameOfAttribute.toLowerCase(Locale.ENGLISH);
+        }
+        return null;
+    }
+    // ARKAPLAN İŞLEM YÖNTEMLERİ:
     /**
      * Verilen veriyi hedef sınıftaki nesneye zerk ederek nesne üretmeye çalışır
      * Şu an parametresiz yapıcı yöntemi bulunmayan sınıfın örneği üretilemiyor
@@ -563,17 +677,6 @@ public class Reflector{
         firstLetter = firstLetter.toUpperCase(Locale.ENGLISH);
         return (firstLetter + s.substring(1));
     }
-    private String getMethodNameDependsCodeStyle(String nameOfAttribute, CODING_STYLE codingStyle, METHOD_TYPES targetMethodType){
-        if(codingStyle == CODING_STYLE.CAMEL_CASE){
-            String preText = (targetMethodType == METHOD_TYPES.GET ? "get" : "set");
-            return preText + convertFirstLetterToUpper(nameOfAttribute);
-        }
-        else if(codingStyle == CODING_STYLE.SNAKE_CASE){
-            String preText = (targetMethodType == METHOD_TYPES.GET ? "get" : "set");
-            return preText + "_" + nameOfAttribute.toLowerCase(Locale.ENGLISH);
-        }
-        return null;
-    }
     private Class<?> getEnumClass(String className){
         return getLoadedClass(className, true);
     }
@@ -584,44 +687,6 @@ public class Reflector{
         catch(ClassNotFoundException exc){
             System.err.println("Sınıf bulunamadı : " + exc.toString());
             return null;
-        }
-    }
-    private Object checkAndConvertListAndArray(Object value, Field target){
-        // İki soruna çözüm aranıyor:
-        // 1) value = List ve element = Array ise uyumluluk arayıp, atama yapma
-        // 2) value = Array ve element = List ise, uyumluluk arayıp, atama yapma
-        if(value == null || target == null)
-            return null;
-        boolean isValueAnArray = value.getClass().isArray();
-        boolean isTargetAnArray = target.getType().isArray();
-        boolean isValueAnList = false;
-        boolean isTargetAnList = false;
-        if(!isValueAnArray){
-            if(value instanceof List)
-                isValueAnList = true;
-        }
-        if(!isTargetAnArray){
-            try{
-                Class casted = target.getType().asSubclass(List.class);
-                if(casted != null)
-                    isTargetAnList = true;
-            }
-            catch(ClassCastException exc){
-                System.err.println("exc : " + exc.toString());
-                isTargetAnList = false;
-            }
-        }
-        if((!isTargetAnArray && !isTargetAnList) || (!isValueAnArray && !isValueAnList))
-            return null;// Taraflardan herhangi birisi hem liste, hem de dizi değilse "null" döndür
-        if(isTargetAnArray){// Hedef bir dizi ise..
-            int dimensionOfTarget = getDimensionOfArray(target.getType());// Hedef dizinin boyutu
-            int dimensionOfValue = findDepthWhole((List) value, 1);// Veri dizisinin boyutu
-            if(dimensionOfValue > dimensionOfTarget)// Hedef ile veri arasında dizi boyutu uyuşmazlığı var
-                return null;
-            return produceNewArrayInjectDataReturnAsObject(target.getType(), value);
-        }
-        else{// Hedef bir liste ise...
-            return produceNewInjectedList(value);
         }
     }
 
@@ -686,5 +751,33 @@ public class Reflector{
             }
         }
         return numberMethods;
+    }
+    public List<String> getBasicDataTypes(){
+        List<String> li = new ArrayList<String>();
+        li.add("java.lang.String");
+        li.add("int");
+        li.add("double");
+        li.add("float");
+        li.add("short");
+        li.add("boolean");
+        li.add("long");
+        li.add("char");
+        li.add("byte");
+        li.add("java.lang.Integer");
+        li.add("java.lang.Double");
+        li.add("java.lang.Float");
+        li.add("java.lang.Boolean");
+        li.add("java.lang.Long");
+        li.add("java.lang.Short");
+        li.add("java.lang.Character");
+        li.add("java.lang.Byte");
+        
+        li.add("java.time.LocalDate");
+        li.add("java.time.LocalDateTime");
+        li.add("java.time.LocalTime");
+        li.add("java.util.Date");
+        li.add("java.sql.Date");
+        li.add("java.lang.Number");
+        return li;
     }
 }
