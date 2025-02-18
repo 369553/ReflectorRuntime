@@ -17,7 +17,7 @@ import java.util.Map;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.1
+ * @version 2.0.2
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -503,6 +503,67 @@ public class Reflector{
             return preText + "_" + nameOfAttribute.toLowerCase(Locale.ENGLISH);
         }
         return null;
+    }
+    /**
+     * Verilen nesnenin verilen alanlarını almak için kullanışlı bir yöntem
+     * @param entity Sınıf örneği (nesne)
+     * @param fields Değeri alınmak istenen alanlar
+     * @param codingStyle Nesnenin 'getter' yönteminin kodlama biçimi
+     * @return Verilen alanların değerleri veyâ boş bir {@code Map}
+     * {@code null} parametre verilmesi durumunda {@code null} döndürülür
+     */
+    public Map<String, Object> getValueOfFields(Object entity, Field[] fields, CODING_STYLE codingStyle){
+        if(entity == null || fields == null)
+            return null;
+        Map<String, Object> values = new HashMap<String, Object>();
+        for(Field fl : fields){
+            if(fl == null)
+                continue;
+            Object value = null;
+            try{
+                value = fl.get(entity);
+            }
+            catch(IllegalAccessException | IllegalArgumentException exc){
+                String getterName = Reflector.getService().getMethodNameDependsCodeStyle(fl.getName(), codingStyle, Reflector.METHOD_TYPES.GET);
+                try{
+                    Method get = entity.getClass().getDeclaredMethod(getterName, null);
+                    value = get.invoke(entity, null);
+                }
+                catch(NoSuchMethodException | InvocationTargetException | IllegalAccessException | IllegalArgumentException excOnFindAndRunGetter){
+                    System.err.println("İlgili alanın verisi alınamadı : " + excOnFindAndRunGetter.toString());
+                }
+            }
+            values.put(fl.getName(), value);
+        }
+        return values;
+    }
+    /**
+     * Verilen nesnenin verilen alanlarını almak için kullanışlı bir yöntem
+     * @param entity Sınıf örneği (nesne)
+     * @param fieldNames Değeri alınmak istenen alanların isimleri
+     * @param codingStyle Nesnenin 'getter' yönteminin kodlama biçimi
+     * @return Verilen alanların değerleri veyâ boş bir {@code Map}
+     * {@code null} parametre verilmesi durumunda {@code null} döndürülür 
+     */
+    public Map<String, Object> getValueOfFields(Object entity, List<String> fieldNames, CODING_STYLE codingStyle){
+        ArrayList<Field> liFields = new ArrayList<Field>();
+        if(entity == null || fieldNames == null)
+            return null;
+        if(fieldNames.isEmpty())
+            return new HashMap<String, Object>();
+        for(String s : fieldNames){
+            try{
+                Field fl = entity.getClass().getDeclaredField(s);
+                if(fl != null)
+                    liFields.add(fl);
+            }
+            catch(NoSuchFieldException | SecurityException exc){
+                System.err.println("exc : " + exc.toString());
+            }
+        }
+        Field[] takeds = new Field[liFields.size()];
+        liFields.toArray(takeds);
+        return getValueOfFields(entity, takeds, codingStyle);
     }
     // ARKAPLAN İŞLEM YÖNTEMLERİ:
     /**
