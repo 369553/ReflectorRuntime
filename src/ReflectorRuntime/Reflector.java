@@ -1,5 +1,6 @@
 package ReflectorRuntime;
 
+import java.io.File;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -17,7 +18,7 @@ import java.util.Map;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.2
+ * @version 2.0.3
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -565,6 +566,23 @@ public class Reflector{
         liFields.toArray(takeds);
         return getValueOfFields(entity, takeds, codingStyle);
     }
+    /**
+     * Uygulama kök dizini içerisindeki, yanî uygulamadaki sınıfları döndürür
+     * @return Yüklenen sınıflardan oluşan bir {@code List} veyâ {@code null}
+     */
+    public List<Class> getClassesOnTheAppPath(){
+        File appRoot = new File(ClassLoader.getSystemResource("").getPath());
+        return getClassesOnThePath(appRoot);
+    }
+    /**
+     * Verilen adresteki sınıfları döndürür (alt adresleri de tarar)
+     * Dosya uzantısı '.class' olan dosyalar yüklenmeye çalışılır
+     * @param path Sınıfların bulunduğu dizin aranacak
+     * @return Sınıfların yüklendiği bir {@code List} veyâ {@code null}
+     */
+    public List<Class> getClassesOnThePath(File path){
+        return getClassesOnTheRoot(path, null, true);
+    }
     // ARKAPLAN İŞLEM YÖNTEMLERİ:
     /**
      * Verilen veriyi hedef sınıftaki nesneye zerk ederek nesne üretmeye çalışır
@@ -749,6 +767,42 @@ public class Reflector{
             System.err.println("Sınıf bulunamadı : " + exc.toString());
             return null;
         }
+    }
+    private List<Class> getClassesOnTheRoot(File root, String fullNameFromRoot, boolean isAppRoot){
+        if(root == null)
+            return null;
+        List<Class> result = new ArrayList<Class>();
+        String path = null;
+        if(!isAppRoot)
+            path = (fullNameFromRoot == null ? root.getName() : fullNameFromRoot + "." + root.getName());
+        for(File fl : root.listFiles()){
+            if(fl == null)
+                continue;
+            if(fl.isFile()){
+                if(!fl.getName().endsWith(".class"))// Sadece '.class' uzantılı dosyaları yüklemeye çalış
+                    continue;
+                Class cls = null;
+                try{
+                    String fullName = (path == null ? fl.getName() : path + "." + fl.getName());
+                    cls = ClassLoader.getSystemClassLoader().loadClass(fullName.substring(0, fullName.length() - 6));
+                    if(cls != null)
+                        result.add(cls);
+                }
+                catch(ClassNotFoundException exc){
+                    System.err.println("Sınıf bulunamadı : " + exc.toString());
+                }
+            }
+            if(fl.isDirectory()){
+                List<Class> subList = getClassesOnTheRoot(fl, path, false);
+                if(subList != null){
+                    for(Class cls : subList){
+                        if(cls != null)
+                            result.add(cls);
+                    }
+                }
+            }
+        }
+        return result;
     }
 
 // ERİŞİM YÖNTEMLERİ:
