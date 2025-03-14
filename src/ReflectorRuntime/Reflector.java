@@ -18,7 +18,7 @@ import java.util.Map;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.3
+ * @version 2.0.4
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -247,6 +247,29 @@ public class Reflector{
         return null;
     }
     /**
+     * Verilen tiplerinin birbirine otomatik olarak dönüşebildiği denetleniyor
+     * Java otomatik sarmalama sebebiyle sarmalanan sınıf ile temel hâli eşleşir
+     * @param cls1 Sınıf - 1
+     * @param cls2 Sınıf - 2
+     * @return Eğer otomatik dönüşüyorsa {@code true}, değilse {@code false} 
+     */
+    public boolean isPairingAutomatically(Class cls1, Class cls2){
+        Class founded = getMapOfPrimitiveToWrapper().get(cls1);
+        if(founded == null){
+            founded = getMapOfPrimitiveToWrapper().get(cls2);
+            if(founded == null)
+                return false;
+            else
+                if(cls1.equals(founded))
+                    return true;
+        }
+        else{
+            if(cls2.equals(founded))
+                return true;
+        }
+        return false;
+    }
+    /**
      * Sarmalayıcı sınıftan temel veri tipini elde edin
      * @param wrapperClass Sarmalayıcı sınıf
      * @return Sarmalayıcı sınıfın karşılığı olan temel {@code "primitive"}
@@ -338,8 +361,22 @@ public class Reflector{
      * durumunda bu yöntemin hangi kodlama standardına göre aranacağı bilgisi
      * @return Verilen verilerin zerk edildiği sınıf örneği veyâ {@code null}
      */
-    public <T> T pruduceNewInjectedObject(Class<T> targetClass, Map<String, Object> data, CODING_STYLE codeStyleNeededOnSearchMethod){
-        return pruduceNewInjectedObject(targetClass, data, codeStyleNeededOnSearchMethod, true);
+    public <T> T pruduceNewInjectedObject(Class<T> targetClass, Map<String, ? extends Object> data, CODING_STYLE codeStyleNeededOnSearchMethod){
+        return pruduceNewInjectedObject(targetClass, data, codeStyleNeededOnSearchMethod, true, false, null);
+    }
+    /**
+     * 
+     * @param <T> Verilen nesnenin tipi
+     * @param targetObject Değerlerin zerk edilmesi istenen sınıf örneği (nesne)
+     * @param data Sınıf örneğine zerk edilmesi istenen özellik değerleri
+     * @param codeStyleNeededOnSearchMethod 'setter' yöntemine ihtiyaç duyulması
+     * durumunda bu yöntemin hangi kodlama standardına göre aranacağı bilgisi
+     * @return Verilerin zerk edildiği nesne veyâ başarısız ise {@code null}
+     */
+    public <T> T injectData(T targetObject, Map<String, ? extends Object> data, CODING_STYLE codeStyleNeededOnSearchMethod){
+        if(targetObject == null)
+            return null;
+        return pruduceNewInjectedObject((Class<T>) targetObject.getClass(), data, codeStyleNeededOnSearchMethod, true, true, targetObject);
     }
     /**
      * Verilen dizi sınıfına bakarak dizi boyutunu döndürür
@@ -595,10 +632,13 @@ public class Reflector{
      * @param tryToForceCastForParameterType Özelliğin veri tipi uyuşmadığında,
      * dönüşüm için ek yöntem uygulanmasını istiyorsanız {@code true} yapın
      * @param codeStyleNeededOnSearchMethod 'setter' yöntemine ihtiyaç duyulması
+     * @param useGivenInstance Veriler verilen {@code instance} referansındaki
+     * nesneye zerk edilecekse {@code true} olmalıdır.
+     * @param instance {@code useGivenInstance} {@code true} ise hedef nesne
      * durumunda bu yöntemin hangi kodlama standardına göre aranacağı bilgisi
      * @return Verilen verilerin zerk edildiği sınıf örneği veyâ {@code null}
      */
-    private <T> T pruduceNewInjectedObject(Class<T> targetClass, Map<String, Object> data, CODING_STYLE codeStyleNeededOnSearchMethod, boolean tryToForceCastForParameterType/*, boolean isIncludeNoParameterConstructor, List<Object> parameterForConstructor*/){
+    private <T> T pruduceNewInjectedObject(Class<T> targetClass, Map<String, ? extends Object> data, CODING_STYLE codeStyleNeededOnSearchMethod, boolean tryToForceCastForParameterType/*, boolean isIncludeNoParameterConstructor, List<Object> parameterForConstructor*/, boolean useGivenInstance, T instance){
         try{// Hedef veri tipinin uygunluğunu kontrol et
             if(!checkTargetClassForInjection(targetClass))
                 return null;
@@ -609,7 +649,11 @@ public class Reflector{
         }
 //        if(isIncludeNoParameterConstructor){} : Eklenecek inşâAllâh
 //          else
-        T obj = produceNewInstance(targetClass);
+        T obj = null;
+        if(useGivenInstance && instance != null)// Verilerin zerk edileceği nesne kullanıcı tarafından verildiyse ve 'null' değilse;
+            obj = instance;
+        else// Diğer durumda yeni bir sınıf örneği oluştur
+            obj = produceNewInstance(targetClass);
         if(obj == null || data == null)// Hedef veri tipinin örneği oluşturulamadıysa veyâ verilen özellik haritası = null
             return null;
         if(data.isEmpty())// Verilen özellik haritasında bir özellik yoksa..
@@ -685,7 +729,7 @@ public class Reflector{
                     for(int index = 0; index < setters.size(); index++){
                         try{
                             setters.get(index).invoke(obj, value);
-                            System.out.println("valeu : " + value);
+//                            System.out.println("value : " + value);
                             break;// Başka 'setter' yöntemi varsa onları uygulamaya çalışma!
                         }
                         catch(SecurityException excOnInvokingSetter){
