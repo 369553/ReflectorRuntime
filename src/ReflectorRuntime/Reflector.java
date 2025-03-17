@@ -18,7 +18,7 @@ import java.util.Map;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.4
+ * @version 2.0.5
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -438,6 +438,40 @@ public class Reflector{
         catch(SecurityException exc){
             System.err.println("exc : " + exc.toString());
             return null;
+        }
+        return result;
+    }
+    /**
+     * Verilen sınıfın verilen alanlarını {@code Field} listesi olarak döndürür
+     * @param cls Alanları alınmak istenen hedef sınıf
+     * @param fieldNames İstenen alanlar, {@code null} veyâ boş ise hepsi alınır
+     * @return Hedef sınıfın ilgili alanlarının listesi veyâ {@code null}
+     */
+    public List<Field> getSpecifiedFields(Class cls, List<String> fieldNames){
+        if(cls == null)
+            return null;
+        List<Field> result = new ArrayList<Field>();
+        boolean takeAll = false;
+        if(fieldNames == null)
+            takeAll = true;
+        else if(fieldNames.isEmpty())
+            takeAll = true;
+        if(takeAll){
+            for(Field fl : cls.getDeclaredFields())
+                result.add(fl);
+        }
+        else{
+            for(String name : fieldNames){
+                Field fl = null;
+                try{
+                    fl = cls.getDeclaredField(name);
+                }
+                catch(NoSuchFieldException | SecurityException exc){
+                    System.err.println("İstenen alan alınamadı : " + exc.toString());
+                }
+                if(fl != null)
+                    result.add(fl);
+            }
         }
         return result;
     }
