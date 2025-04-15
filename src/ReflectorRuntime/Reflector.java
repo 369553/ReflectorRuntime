@@ -250,7 +250,7 @@ public class Reflector{
                 else
                     Array.set(value, sayac,
                         produceInjectedArray(classOfDataArray.getComponentType(),
-                            element));
+                            element, doCastIfNeeded, ignoreMismatchElement));
             }
             return (T) value;
         }
@@ -683,10 +683,10 @@ public class Reflector{
             return null;// Taraflardan herhangi birisi hem liste, hem de dizi değilse "null" döndür
         if(isTargetAnArray){// Hedef bir dizi ise..
             int dimensionOfTarget = getDimensionOfArray(target.getType());// Hedef dizinin boyutu
-            int dimensionOfValue = findDepthWhole((List) value, 1);// Veri dizisinin boyutu
+            int dimensionOfValue = (isValueAnArray ? getDimensionOfArray(value.getClass()) : getDimensionOfList((List) value));
             if(dimensionOfValue > dimensionOfTarget)// Hedef ile veri arasında dizi boyutu uyuşmazlığı var
                 return null;
-            return produceInjectedArray(target.getType(), value);
+            return produceInjectedArray(target.getType(), value, true, false);
         }
         else{// Hedef bir liste ise...
             return produceInjectedList(value);
