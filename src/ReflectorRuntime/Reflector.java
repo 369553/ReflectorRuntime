@@ -6,11 +6,24 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeSet;
 
 /**
  * 
@@ -18,13 +31,15 @@ import java.util.Map;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.6
+ * @version 2.0.9
  */
 public class Reflector{
     private static Reflector serv;// service
     private HashMap<Class<?>, Class<?>> mapOfPrimitiveToWrapper;
     private HashMap<Class<?>, Method> numberMethods;
     private final List<String> basicDataTypes = getBasicDataTypes();
+    private DateTimeFormatter sqlAndIsoDFormatter;//sqlAndISODateFormatter : SQL târih veri tipini ayrıştırmak için...
+    private DateTimeFormatter sqlAndIsoDTFormatter;//sqlAndISODateTimeFormatter : SQL târih saat veri tipini ayrıştırmak için kullanılıyor
 
     /**
      * 'getter' ve/veyâ 'setter' yöntemlerinin sınıf içerisinde
@@ -74,7 +89,7 @@ public class Reflector{
      * @param <T> İstenen nesnenin tipi
      * @param classOfDataArray Dizisi istenen nesnenin sınıfı
      * @param length İstenen dizi uzunluğu
-     * @return İstenen tipte dizi (nesne olarak) {@code null} döndürülür.
+     * @return İstenen tipte dizi (nesne olarak) veyâ {@code null} döndürülür.
      */
     public <T> T produceArrayReturnAsObject(Class<T> classOfDataArray, int length){// Yukarıdaki fonksiyonun aynısı; fakat temel veri tiplerinin dizisi için de çalışır, bi iznillâh..
         try{
@@ -93,7 +108,10 @@ public class Reflector{
      * - Diziler
      * - {@code Enum} tipindeki veriler
      * - Parametresiz yapıcı yöntemi olan sınıflar
-     * - {@code List} için {@code ArrayList}, {@code Map} için {@HashMap} üretilir
+     * - {@code List} için {@code ArrayList}, {@code Map} için {@code HashMap},
+     * - {@code SortedSet} için {@code TreeSet}, {@code Set} için {@code HashSet},
+     * - {@code Queue} için {@code LinkedList},
+     * - {@code Collection} için {@code ArrayList} üretilir
      * @param <T> Örneği istenen sınıf, tip olarak
      * @param target Nesnesi üretilmek istenen sınıf
      * @return Verilen sınıfın ilklendirilmiş bir örneği veya {@code null}
@@ -124,11 +142,20 @@ public class Reflector{
                 obj = target.cast(Array.newInstance(target.getComponentType(), 1));
             }
             else if(target.isInterface()){// Hedef bir arayüzse;
-                if(target == List.class){// List arayüzü ise ArrayList döndür
+                if(target == List.class || target.getName().equals("java.util.Collection")){// List arayüzü ise ArrayList döndür
                     obj = (T) new ArrayList<Object>();
                 }
                 else if(target == Map.class){// Map arayüzü ise, HashMap döndür
                     obj = (T) new HashMap();
+                }
+                else if(target.getName().equals("java.util.SortedSet")){
+                    obj = (T) new TreeSet<Object>();
+                }
+                else if(target.getName().equals("java.util.Queue")){
+                    obj = (T) new LinkedList();
+                }
+                else if(target.getName().equals("java.util.Set")){
+                    obj = (T) new HashSet();
                 }
             }
             else{// Yapıcı yöntemi bulup, çalıştırarak yeni nesne elde etmeye çalış
@@ -183,11 +210,11 @@ public class Reflector{
      * Verilen bilgilerle boyut bağımsız dizi oluşturun
      * Dönüştürülemeyen bir eleman olursa {@code null} döndürülür
      * Bu, varsayılan olarak böyledir; {@code ignoreMismatcElement} parametresi
-     * {@true} olarak verilirse, ilgili eleman listeye eklenmez, atlanır
+     * {@code true} olarak verilirse, ilgili eleman listeye eklenmez, atlanır
      * Atlanan verinin dizideki yeri için atama yapılmadığından 0 atanabilir
      * Bu fonksiyon en üst derinlikli elemanda veri tipi dönüşümünü ('casting')
      * desteklediğinden, verilerin dönüştürülmesi maksadıyla da kullanılabilir
-     * Misal, {@code List<List<Float>>} -> {@code double[][]}'a dönüştürebilir
+     * Misal, {@code List<List<Float>>} sınıfı {@code double[][]}'a dönüştürebilir
      * @param <T> Hedef dizi sınıfını belirten tip
      * @param classOfDataArray Hedef sınıf, misal {@code int[][].class} gibi..
      * @param data Veri {@code List} veyâ dizi ({@code Array}) biçiminde olmalı
@@ -263,7 +290,7 @@ public class Reflector{
      * Verilen bilgilerle boyut bağımsız dizi oluşturun
      * Dönüştürülemeyen bir eleman olursa {@code null} döndürülür
      * Bu, varsayılan olarak böyledir; {@code ignoreMismatcElement} parametresi
-     * {@true} olarak verilirse, ilgili eleman listeye eklenmez, atlanır
+     * {@code true} olarak verilirse, ilgili eleman listeye eklenmez, atlanır
      * @param <T> Hedef dizi sınıfını belirten tip
      * @param classOfDataArray Hedef sınıf, misal {@code int[][].class} gibi..
      * @param data Veri {@code List} veyâ dizi ({@code Array}) biçiminde olmalı
@@ -279,7 +306,7 @@ public class Reflector{
      * Dönüştürülemeyen bir eleman olursa {@code null} döndürülür
      * Elemanların veri tipleri uyumsuzsa dönüştürülmeye çalışılmaz;
      * Eğer elemanların dönüştürülmesini istiyorsanız, diğer yöntemi kullanın
-     * {@true} olarak verilirse, ilgili eleman listeye eklenmez, atlanır
+     * {code @true} olarak verilirse, ilgili eleman listeye eklenmez, atlanır
      * @param <T> Hedef dizi sınıfını belirten tip
      * @param classOfDataArray Hedef sınıf, misal {@code int[][].class} gibi..
      * @param data Veri {@code List} veyâ dizi ({@code Array}) biçiminde olmalı
@@ -398,6 +425,10 @@ public class Reflector{
     }
     /**
      * Metîn biçiminde depolanan farklı veri tiplerindeki veriyi dönüştürür
+     * Dönüşümün esnekliği için bâzı özel durumlar ele alınmıştır:
+     * {@code Boolean} ve {@code boolean} veri tipi dönüştürmede 1 ve 0 değerleri
+     * {@code Boolean.TRUE} ve {@code Boolean.FALSE} değerleriyle eşleşir
+     * Veri, karakter tipinde isteniyorsa ilk karakteri alınır
      * @param <T> Dönüşüm yapılması istenen sınıf tipi
      * @param data Metîn hâlinde bulunan veri
      * @param target Verilen verinin dönüştürülmesi istenen veri tipi
@@ -410,6 +441,13 @@ public class Reflector{
             return null;
         if(target == String.class)
             return ((T) new String(data));
+        if(target.isEnum()){
+            return getEnumByData(target, data);
+        }
+        else if(target.equals(LocalDate.class) || target.equals(LocalDateTime.class) || target.equals(LocalTime.class)
+                || target.equals(Date.class)){
+            return getDateObjectFromString(target, data);
+        }
         try{
             data = data.trim();// Boşluklar varsa kaldır
             Object casted = null;
@@ -417,8 +455,27 @@ public class Reflector{
                 casted = Integer.valueOf(data);
             else if(target.equals(Double.class) || target.equals(double.class))
                 casted = Double.valueOf(data);
-            else if(target.equals(Boolean.class) || target.equals(boolean.class))
-                casted = Boolean.valueOf(data);
+            else if(target.equals(Boolean.class) || target.equals(boolean.class)){
+                String preProcessed = data.toLowerCase();
+                switch(preProcessed){
+                    case "true" : {
+                        casted = Boolean.TRUE;
+                        break;
+                    }
+                    case "false" : {
+                        casted = Boolean.FALSE;
+                        break;
+                    }
+                    case "1" : {
+                        casted = Boolean.TRUE;
+                        break;
+                    }
+                    case "0" : {
+                        casted = Boolean.FALSE;
+                        break;
+                    }
+                }
+            }
             else if(target.equals(Character.class) || target.equals(char.class))
                 casted = data.charAt(0);// İlk karakter alınıyor
             else if(target.equals(Float.class) || target.equals(float.class))
@@ -461,6 +518,49 @@ public class Reflector{
             System.err.println("İstenen veri tipine dönüştürülemedi : " + exc.toString());
         }
         return null;
+    }
+    /**
+     * SQL ve ISO biçimindeki târih, târih - zamân ve zamân verisini hedef
+     * tipe dönüştürmek için kullanılır.
+     * Verilen târihin daha kapsayıcı olduğu durumda alt birime dönüştürülebilir
+     * @param <T> Hedef sınıfı temsil eden tip
+     * @param target Hedef sınıf, şunlardan birisi olabilir:
+     * - {@code java.time.LocalDateTime}
+     * - {@code java.time.LocalDate}
+     * - {@code java.time.LocalTime}
+     * - {@code java.util.Date}
+     * Şu formattaki veriler tanınır:
+     * "[yyyy[-]MM[-]-dd]['T' | ' '][HH:mm:ss][.S{0,1,2,3,4,5,6}]
+     * Misal,şu veriler veyâ bu verilerin alt parçaları (târih - saat) tanınır:
+     * "2025-05-12 12:34:43" : SQL biçimi
+     * "20250512 12:34:43" : SQL biçimi
+     * "20250512 12:34:43.215353" : SQL biçimi
+     * "2025-05-12T12:34:43" : ISO biçimi
+     * "2025-05-12T12:34:43.215353" : ISO biçimi
+     * @param data ISO veyâ SQL biçimindeki metîn
+     * @return İstenen tipte târih - zamân verisi veyâ {@code null}
+     */
+    public <T> T getDateObjectFromString(Class<T> target, String data){//2025-05-12 verisinden 2025-05-12 00:00:00 verisini üretecek şekilide dayanıklılık ekle
+        if(target == null || data == null)
+            return null;
+        if(data.isEmpty())
+            return null;
+        T result = null;// Sonuç
+        try{
+            TemporalAccessor raw = getSQLAndISODTFormatter().parse(data);// Ayrıştırma
+            if(target.equals(LocalDate.class))
+                result = (T) LocalDate.from(raw);
+            else if(target.equals(LocalDateTime.class))
+                result = (T) LocalDateTime.from(raw);
+            else if(target.equals(LocalTime.class))
+                result = (T) LocalTime.from(raw);
+            else if(target.equals(Date.class))
+                result = (T) Date.from(LocalDateTime.from(raw).toInstant(ZoneOffset.of("Z")));
+        }
+        catch(IllegalArgumentException | NullPointerException | DateTimeException exc){
+            System.err.println("Târih saat verisini parçalama işlemi başarısız : " + exc.toString());
+        }
+        return result;
     }
     /**
      * Verilerin birbirine dönüştürülebildiği durumlar için dönüşüm desteklenir
@@ -776,7 +876,7 @@ public class Reflector{
      * Uygulama kök dizini içerisindeki, yanî uygulamadaki sınıfları döndürür
      * @return Yüklenen sınıflardan oluşan bir {@code List} veyâ {@code null}
      */
-    public List<Class> getClassesOnTheAppPath(){
+    public List<Class<?>> getClassesOnTheAppPath(){
         File appRoot = new File(ClassLoader.getSystemResource("").getPath());
         return getClassesOnThePath(appRoot);
     }
@@ -786,13 +886,83 @@ public class Reflector{
      * @param path Sınıfların bulunduğu dizin aranacak
      * @return Sınıfların yüklendiği bir {@code List} veyâ {@code null}
      */
-    public List<Class> getClassesOnThePath(File path){
+    public List<Class<?>> getClassesOnThePath(File path){
         return getClassesOnTheRoot(path, null, true);
     }
+    /**
+     * Verilen veriye dayanarak ilgili Enum verisini getirir
+     * Verinin {@code String.valueOf()} ile alınan değeri hedefteki değerlerin
+     * aynı fonksiyonla alınan değerine eşit olmalıdır; bu durumda {@code Enum}
+     * tipinde istediğiniz değişken verisini {@code String} tipinde verebilirsiniz.
+     * @param <T> Hedef sınıfı temsîl eden sınıf
+     * @param target Hedef {@code Enum} sınıfı
+     * @param data Veri, {@code Enum} veyâ {@code String} tipinde olabilir
+     * @return İstenen {@code Enum} değeri veyâ {@code null}
+     */
+    public <T> T getEnumByData(Class<T> target, Object data){
+        if(target == null || data == null)
+            return null;
+        if(!target.isEnum())
+            return null;
+        T value = null;
+        try{
+            for(T curr : target.getEnumConstants()){
+                if(String.valueOf(curr).equals(String.valueOf(data)))
+                    value = curr;
+            }
+        }
+        catch(Exception exc){
+            System.err.println("exc : " + exc.toString());
+        }
+        return value;
+    }
+    /**
+     * Verilen târih, târih - saat ve saat nesnesini SQL tarzı metne çevirir
+     * Yalnızca kabûl edilen zamân sınıfları için işlem yapılır
+     * @param value Târih nesnesi, şu tipler kabûl edilir:
+     * - {@code java.time.LocalDateTime}
+     * - {@code java.time.LocalDate}
+     * - {@code java.time.LocalTime}
+     * - {@code java.util.Date}
+     * @return SQL biçiminde zamân değeri metni veyâ {@code null}
+     */
+    public String getDateTimeTextAsSQLStyle(Object value){
+        if(value == null)
+            return null;
+        Class<?> src = value.getClass();
+        String result = null;
+        DateTimeFormatter sqlDFrm = new DateTimeFormatterBuilder().appendValue(ChronoField.YEAR, 4)
+                .appendLiteral('-').appendValue(ChronoField.MONTH_OF_YEAR, 2)
+                .appendLiteral('-').appendValue(ChronoField.DAY_OF_MONTH, 2)
+                .toFormatter();//sqlDateFormatter
+        DateTimeFormatter sqlTFrm = DateTimeFormatter.ISO_TIME;
+        DateTimeFormatter sqlLDTFrm = new DateTimeFormatterBuilder().append(sqlDFrm)
+                .appendLiteral(' ').append(sqlTFrm).toFormatter();
+        try{
+            if(src.equals(LocalDateTime.class)){
+                result = ((LocalDateTime) value).format(sqlLDTFrm);
+            }
+            else if(src.equals(LocalDate.class))
+                result = ((LocalDate) value).format(sqlDFrm);
+
+            else if(src.equals(LocalTime.class))
+                result = ((LocalTime) value).format(sqlTFrm);
+            else if(src.equals(Date.class)){
+                result = LocalDateTime.ofInstant(((Date) value).toInstant(),
+                        ZoneOffset.of("Z")).format(sqlLDTFrm);
+            }
+        }
+        catch(IllegalArgumentException | NullPointerException | DateTimeException exc){
+            System.err.println("Verilen zamân nesnesi hedef biçime çevrilemedi : " + exc.toString());
+        }
+        return result;
+    }
+
     // ARKAPLAN İŞLEM YÖNTEMLERİ:
     /**
      * Verilen veriyi hedef sınıftaki nesneye zerk ederek nesne üretmeye çalışır
-     * Şu an parametresiz yapıcı yöntemi bulunmayan sınıfın örneği üretilemiyor
+     * Şu an parametresiz yapıcı yöntemi bulunmayan sınıfın örneği üretilemiyor;
+     * fakat nesnenin kullanıcı tarafından sağlanması destekleniyor
      * {@code enum} değerler için "getter" erişim yöntemi aranmıyor; yanî enum 
      * değerin gizli olmaması lazım.
      * @param <T> Sınıf örneği istenen sınıf
@@ -827,98 +997,129 @@ public class Reflector{
             return null;
         if(data.isEmpty())// Verilen özellik haritasında bir özellik yoksa..
             return obj;
-        try{
-            Field[] fields = targetClass.getDeclaredFields();
-            for(Field fl : fields){
-                Object value = data.get(fl.getName());
-                if(value == null){
-                    if(fl.getType().isPrimitive())
-                        continue;// Temel veri tipindeki bir alana null zerk edilemez, bu alanı atla
+        if(targetClass.isEnum())
+            return getEnumByData(targetClass, data.values().iterator().next());
+        for(String flName : data.keySet()){
+            boolean execSetter = false;
+            Field fl = null;
+            try{
+                fl = targetClass.getDeclaredField(flName);
+            }
+            catch(SecurityException | NoSuchFieldException exc){
+                System.err.println("Verinin zerk edileceği ilgili alan bulunumadı / alınamadı : " + exc.toString());
+            }
+            if(fl == null)
+                continue;
+            Object value = data.get(flName);
+            if(value == null){
+                if(fl.getType().isPrimitive())
+                    continue;// Temel veri tipindeki bir alana null zerk edilemez, bu alanı atla
+            }
+            if(fl.getType().isEnum()){
+                Class founded = getEnumClass(fl.getType().getName());
+                if(founded == null){// İlgili alanın tipi olan 'enum' sınıfı bulunamadı
+                    System.err.println("İlgili alanın tipi olan 'enum' sınıfı bulunamadı!");
+                    continue;
                 }
-                if(fl.getType().isEnum()){
-                    Class founded = getEnumClass(fl.getType().getName());
-                    if(founded == null){// İlgili alanın tipi olan 'enum' sınıfı bulunamadı
-                        System.err.println("İlgili alanın tipi olan 'enum' sınıfı bulunamadı!");
-                        continue;
-                    }
-                    if(value != null){// Metîn olarak verilen 'enum' değerlerin enum değere dönüştürülmesi işlemi:
-                        boolean enumValueFounded = false;
-                        if(value instanceof String){// 'enum' değer veri haritasında metîn olarak saklanıyorsa;
-                            for(Object enumValue : founded.getEnumConstants()){
-                                if(enumValue.toString().equals(value.toString())){
-                                    value = enumValue;
-                                    enumValueFounded = true;
-                                }
-                            }
-                            if(!enumValueFounded){// Değer metîn ise ve karşılığı olan enum değer bulunamadıysa;
-                                // enum değerin 'getter' yöntemi aranması uygunsa, buraya ilâve edilebilir
-                                value = null;// Hedef özelliğe 'null' değerini zerk et.
+                if(value != null){// Metîn olarak verilen 'enum' değerlerin enum değere dönüştürülmesi işlemi:
+                    boolean enumValueFounded = false;
+                    if(value instanceof String){// 'enum' değer veri haritasında metîn olarak saklanıyorsa;
+                        for(Object enumValue : founded.getEnumConstants()){
+                            if(enumValue.toString().equals(value.toString())){
+                                value = enumValue;
+                                enumValueFounded = true;
                             }
                         }
-                    }
-               }
-                if(tryToForceCastForParameterType && value != null){
-                    if(value.getClass() != fl.getType()){// Hedef özelliğin veri tipi ile verilen değerin veri tipi aynı değilse!
-                        if(!value.getClass().isPrimitive() && !fl.getType().isPrimitive()){
-                            // Hedef özelliğin veri tipine çevirmeye çalış:
-                            try{
-                                Object castedValue = fl.getType().cast(value);
-                                value = castedValue;
-                            }
-                            catch(ClassCastException flCastException){
-                                System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
-                                Object convertedValue = checkAndConvertListAndArray(value, fl);
-                                if(convertedValue != null)
-                                    value = convertedValue;
-                                //Buraya continue; yazmıyorum; çünkü belki 'setter' yöntemi bu veri tipinden değişkeni parametre olarak kabûl ediyordur
-                            }
+                        if(!enumValueFounded){// Değer metîn ise ve karşılığı olan enum değer bulunamadıysa;
+                            // enum değerin 'getter' yöntemi aranması uygunsa, buraya ilâve edilebilir
+                            value = null;// Hedef özelliğe 'null' değerini zerk et.
                         }
                     }
                 }
-                try{
-                    fl.set(obj, value);// Basit zerk : Erişim izni olmayan alanlar için çalışmaz!
-                }
-                catch(IllegalAccessException | IllegalArgumentException excOnBasicInjection){// Hedef özelliğe doğrudan erişim izni yok veyâ parametrenin veri tipi uyuşmuyor, diğer yöntemleri dene
-//                    System.err.println("exc : " + excOnBasicInjection.toString());
-                    // Veriyi hedef özelliğe zerk edebilmek için 'setter' yöntemi ara:
-                    String methodName = getMethodNameDependsCodeStyle(fl.getName(), codeStyleNeededOnSearchMethod, METHOD_TYPES.SET);
-                    ArrayList<Method> setters = new ArrayList<Method>();
-                    try{
-                        for(Method m : targetClass.getDeclaredMethods()){
-                            if(m.getName().equals(methodName))
-                                setters.add(m);
-                        }
-                    }
-                    catch(SecurityException excOnTakingMethods){
-                        System.err.println("Sınıfın yöntem isimleri alınamadı : " + excOnTakingMethods.toString());
-                        continue;
-                    }
-                    if(setters.isEmpty())
-                        continue;
-                    for(int index = 0; index < setters.size(); index++){
+           }
+            if(tryToForceCastForParameterType && value != null){
+                if(value.getClass() != fl.getType()){// Hedef özelliğin veri tipi ile verilen değerin veri tipi aynı değilse!
+                    if(!value.getClass().isPrimitive() && !fl.getType().isPrimitive()){
+                        // Hedef özelliğin veri tipine çevirmeye çalış:
                         try{
-                            setters.get(index).invoke(obj, value);
-//                            System.out.println("value : " + value);
-                            break;// Başka 'setter' yöntemi varsa onları uygulamaya çalışma!
+                            Object castedValue = fl.getType().cast(value);
+                            value = castedValue;
                         }
-                        catch(SecurityException excOnInvokingSetter){
-                            System.err.println("Hedef özelliğin 'setter' yöntemi güvenlik sebebiyle çalıştırılamadı! : " + excOnInvokingSetter);
-                        }
-                        catch(ExceptionInInitializerError | InvocationTargetException exc2OnInvokingSetter){
-                            System.err.println("Hedef özelliğin 'setter' yöntemi çalıştırılamadı : " + exc2OnInvokingSetter.toString());
-                        }
-                        catch(IllegalArgumentException exc3OnInvokingSetter){
-                            System.err.println("Hedef özelliğin 'setter' yöntemi için geçersiz parametre verildi : " + exc3OnInvokingSetter.toString());
-                        }
-                        catch(IllegalAccessException exc4OnInvokingSetter){
-                            System.err.println("Hedef özelliğin 'setter' yöntemi çalıştırılırken erişim hatâsı alındı : " + exc4OnInvokingSetter.toString());
+                        catch(ClassCastException flCastException){
+//                            System.err.println("Şu alanın veri tipi verilen değerin veri tipiyle uyuşmuyor : " + fl.getName());
+                            Object convertedValue = checkAndConvertListAndArray(value, fl);
+                            if(convertedValue != null)
+                                value = convertedValue;
+                            //Buraya continue; yazmıyorum; çünkü belki 'setter' yöntemi bu veri tipinden değişkeni parametre olarak kabûl ediyordur
+                            // Ayrıca BigInteger - int gibi ikililer de buraya giriyor,
+                            // casting ve list - array casting için daha iyi bir mimarisel çözüm lazım
                         }
                     }
                 }
             }
-        }
-        catch(SecurityException exc){
-            System.err.println("exc : " + exc.toString());
+            try{
+                fl.set(obj, value);// Basit zerk : Erişim izni olmayan alanlar için çalışmaz!
+            }
+            catch(IllegalArgumentException excFromNonSuitableParam){// Parametrenin veri tipi uyuşmuyor
+                Object casted = getCastedObject(fl.getType(), value);// Veri tipini dönüştür
+                if(casted != null){
+                    value = casted;
+                    try{
+                        fl.set(obj, value);
+                    }
+                    catch(IllegalArgumentException | IllegalAccessException excFromNonSuitableCastedParam){
+                        execSetter = true;// 'setter' yöntemini ara ve onun üzerinden özelliği zerk etmeye çalış
+                    }
+                }
+            }
+            catch(IllegalAccessException excFromUnAccessibleConstructor){// Hedef özelliğe doğrudan erişim izni yok
+                execSetter = true;// 'setter' yöntemini ara ve onun üzerinden özelliği zerk etmeye çalış
+            }
+            if(execSetter){
+                // Veriyi hedef özelliğe zerk edebilmek için 'setter' yöntemi ara:
+                String methodName = getMethodNameDependsCodeStyle(fl.getName(), codeStyleNeededOnSearchMethod, METHOD_TYPES.SET);
+                ArrayList<Method> setters = new ArrayList<Method>();
+                try{
+                    for(Method m : targetClass.getDeclaredMethods()){
+                        if(m.getName().equals(methodName))// Aynı isimdeki tüm 'setter' fonksiyonlarını al
+                            setters.add(m);
+                    }
+                }
+                catch(SecurityException excOnTakingMethods){
+                    System.err.println("Sınıfın yöntem isimleri alınamadı : " + excOnTakingMethods.toString());
+                    continue;
+                }
+                if(setters.isEmpty())// Sınıfta 'setter' yoksa, bu özelliği atla
+                    continue;
+                for(int index = 0; index < setters.size(); index++){
+                    try{
+                        setters.get(index).invoke(obj, value);
+//                            System.out.println("value : " + value);
+                        break;// Başka 'setter' yöntemi varsa onları uygulamaya çalışma!
+                    }
+                    catch(SecurityException excOnInvokingSetter){
+                        System.err.println("Hedef özelliğin 'setter' yöntemi güvenlik sebebiyle çalıştırılamadı! : " + excOnInvokingSetter);
+                    }
+                    catch(ExceptionInInitializerError | InvocationTargetException exc2OnInvokingSetter){
+                        System.err.println("Hedef özelliğin 'setter' yöntemi çalıştırılamadı : " + exc2OnInvokingSetter.toString());
+                    }
+                    catch(IllegalArgumentException exc3OnInvokingSetter){
+                        Object casted = getCastedObject(fl.getType(), value);
+                        if(casted != null){
+                            try{
+                                setters.get(index).invoke(obj, casted);
+                                break;// Başka 'setter' yöntemi varsa onları uygulamaya çalışma!
+                            }
+                            catch(SecurityException | ExceptionInInitializerError | InvocationTargetException | IllegalAccessException | IllegalArgumentException excFrom2ndInvokingSetter){
+                                System.err.println("Zerk işlemi hedef özelliğin 'setter' yöntemiyle yapılamadı (özelliğin tek 'setter' metodu varsa özelliğe zerk yapılamadı): " + excFrom2ndInvokingSetter.toString());
+                            }
+                        }
+                    }
+                    catch(IllegalAccessException exc4OnInvokingSetter){
+                        System.err.println("Hedef özelliğin 'setter' yöntemi çalıştırılırken erişim hatâsı alındı : " + exc4OnInvokingSetter.toString());
+                    }
+                }
+            }
         }
         return obj;
     }
@@ -936,7 +1137,7 @@ public class Reflector{
         }
         return obj;
     }
-    private String getParameterForConstructorOfWrapperBasicClass(Class cls){
+    private String getParameterForConstructorOfWrapperBasicClass(Class<?> cls){
         String param = null;
         if(cls.equals(Integer.class))
             param = "0";
@@ -962,7 +1163,7 @@ public class Reflector{
      * döndürülür. Sınıfın null, arayüz, dizi veyâ temel veri tipi olması
      * durumunda {@code false}, diğer durumda {@code true} döndürülür
      */
-    private boolean checkTargetClassForInjection(Class cls){
+    private boolean checkTargetClassForInjection(Class<?> cls){
         try{
             if(cls == null)
                 return false;
@@ -995,10 +1196,10 @@ public class Reflector{
             return null;
         }
     }
-    private List<Class> getClassesOnTheRoot(File root, String fullNameFromRoot, boolean isAppRoot){
+    private List<Class<?>> getClassesOnTheRoot(File root, String fullNameFromRoot, boolean isAppRoot){
         if(root == null)
             return null;
-        List<Class> result = new ArrayList<Class>();
+        List<Class<?>> result = new ArrayList<Class<?>>();
         String path = null;
         if(!isAppRoot)
             path = (fullNameFromRoot == null ? root.getName() : fullNameFromRoot + "." + root.getName());
@@ -1008,7 +1209,7 @@ public class Reflector{
             if(fl.isFile()){
                 if(!fl.getName().endsWith(".class"))// Sadece '.class' uzantılı dosyaları yüklemeye çalış
                     continue;
-                Class cls = null;
+                Class<?> cls = null;
                 try{
                     String fullName = (path == null ? fl.getName() : path + "." + fl.getName());
                     cls = ClassLoader.getSystemClassLoader().loadClass(fullName.substring(0, fullName.length() - 6));
@@ -1020,9 +1221,9 @@ public class Reflector{
                 }
             }
             if(fl.isDirectory()){
-                List<Class> subList = getClassesOnTheRoot(fl, path, false);
+                List<Class<?>> subList = getClassesOnTheRoot(fl, path, false);
                 if(subList != null){
-                    for(Class cls : subList){
+                    for(Class<?> cls : subList){
                         if(cls != null)
                             result.add(cls);
                     }
@@ -1061,7 +1262,7 @@ public class Reflector{
     private HashMap<Class<?>, Method> getNumberMethods(){
         if(numberMethods == null){
             numberMethods = new HashMap<Class<?>, Method>();
-            Class numberClass = Number.class;
+            Class<?> numberClass = Number.class;
             try{
                 Method m = Number.class.getDeclaredMethod("doubleValue", null);
                 numberMethods.put(double.class, m);
@@ -1120,5 +1321,25 @@ public class Reflector{
         li.add("java.sql.Date");
         li.add("java.lang.Number");
         return li;
+    }
+    protected DateTimeFormatter getSQLAndISODFormatter(){
+        if(sqlAndIsoDFormatter == null)
+            sqlAndIsoDFormatter = new DateTimeFormatterBuilder().
+                parseCaseInsensitive().appendValue(ChronoField.YEAR, 4)
+                .optionalStart().appendLiteral('-').optionalEnd()
+                .appendValue(ChronoField.MONTH_OF_YEAR, 2)
+                .optionalStart().appendLiteral('-').optionalEnd()
+                .appendValue(ChronoField.DAY_OF_MONTH, 2).toFormatter();
+        return sqlAndIsoDFormatter;
+    }
+    protected DateTimeFormatter getSQLAndISODTFormatter(){
+        if(sqlAndIsoDTFormatter == null)
+            sqlAndIsoDTFormatter = new DateTimeFormatterBuilder()
+                .optionalStart().append(getSQLAndISODFormatter()).optionalEnd()
+                .optionalStart().appendLiteral(' ').optionalEnd()
+                .optionalStart().appendLiteral('T').optionalEnd()
+                .optionalStart().append(DateTimeFormatter.ISO_TIME).optionalEnd()
+                .toFormatter();
+        return sqlAndIsoDTFormatter;
     }
 }
