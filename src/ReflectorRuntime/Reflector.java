@@ -1,11 +1,13 @@
 package ReflectorRuntime;
 
 import java.io.File;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URLDecoder;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,7 +33,7 @@ import java.util.TreeSet;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.9
+ * @version 2.0.10
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -360,7 +362,7 @@ public class Reflector{
     }
     /**
      * Verilen tiplerinin birbirine otomatik olarak dönüşebildiği denetleniyor
-     * Java otomatik sarmalama sebebiyle sarmalanan sınıf ile temel hâli eşleşir
+     * Java otomatik sarmalama özelliğiyle sarmalanan sınıf - temel hâli eşleşir
      * @param cls1 Sınıf - 1
      * @param cls2 Sınıf - 2
      * @return Eğer otomatik dönüşüyorsa {@code true}, değilse {@code false} 
@@ -600,7 +602,7 @@ public class Reflector{
         return produceInjectedObject(targetClass, data, codeStyleNeededOnSearchMethod, true, false, null);
     }
     /**
-     * 
+     * Verilen alan({@code Field} değerlerini verilen nesneye zerk eder(aktarır)
      * @param <T> Verilen nesnenin tipi
      * @param targetObject Değerlerin zerk edilmesi istenen sınıf örneği (nesne)
      * @param data Sınıf örneğine zerk edilmesi istenen özellik değerleri
@@ -877,7 +879,16 @@ public class Reflector{
      * @return Yüklenen sınıflardan oluşan bir {@code List} veyâ {@code null}
      */
     public List<Class<?>> getClassesOnTheAppPath(){
-        File appRoot = new File(ClassLoader.getSystemResource("").getPath());
+        String path = ClassLoader.getSystemResource("").getPath();
+        File appRoot = null;
+        try{
+            appRoot = new File(URLDecoder.decode(path, "UTF8"));
+        }
+        catch(UnsupportedEncodingException exc){
+            return null;
+        }
+        if(appRoot == null)
+            return null;
         return getClassesOnThePath(appRoot);
     }
     /**
