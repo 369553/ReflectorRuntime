@@ -33,7 +33,7 @@ import java.util.TreeSet;
  * Çalışma zamânında verileri zerk ederk sınıf örneği (nesne) oluşturma,
  * dizi - liste oluşturma gibi ihtiyaçların karşılanmasına yönelik
  * yardımcı sınıf
- * @version 2.0.10
+ * @version 2.0.11
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -979,7 +979,7 @@ public class Reflector{
      * @param <T> Sınıf örneği istenen sınıf
      * @param targetClass Örneği istenen sınıf
      * @param data Sınıfın örneğine zerk edilmesi istenen özellik değerleri
-     * @param tryToForceCastForParameterType Özelliğin veri tipi uyuşmadığında,
+     * @param tryForceCasting Özelliğin veri tipi uyuşmadığında,
      * dönüşüm için ek yöntem uygulanmasını istiyorsanız {@code true} yapın
      * @param codeStyleNeededOnSearchMethod 'setter' yöntemine ihtiyaç duyulması
      * @param useGivenInstance Veriler verilen {@code instance} referansındaki
@@ -988,7 +988,7 @@ public class Reflector{
      * durumunda bu yöntemin hangi kodlama standardına göre aranacağı bilgisi
      * @return Verilen verilerin zerk edildiği sınıf örneği veyâ {@code null}
      */
-    private <T> T produceInjectedObject(Class<T> targetClass, Map<String, ? extends Object> data, CODING_STYLE codeStyleNeededOnSearchMethod, boolean tryToForceCastForParameterType/*, boolean isIncludeNoParameterConstructor, List<Object> parameterForConstructor*/, boolean useGivenInstance, T instance){
+    private <T> T produceInjectedObject(Class<T> targetClass, Map<String, ? extends Object> data, CODING_STYLE codeStyleNeededOnSearchMethod, boolean tryForceCasting/*, boolean isIncludeNoParameterConstructor, List<Object> parameterForConstructor*/, boolean useGivenInstance, T instance){
         try{// Hedef veri tipinin uygunluğunu kontrol et
             if(!checkTargetClassForInjection(targetClass))
                 return null;
@@ -1048,7 +1048,13 @@ public class Reflector{
                     }
                 }
            }
-            if(tryToForceCastForParameterType && value != null){
+            if(isAboutDateTime(fl.getType())){
+                if(value instanceof String)
+                    value = getDateObjectFromString(fl.getType(), (String) value);
+//                else if(value instanceof Long)
+//                    value = getDateObjectFromSecond();
+            }
+            else if(tryForceCasting && value != null){
                 if(value.getClass() != fl.getType()){// Hedef özelliğin veri tipi ile verilen değerin veri tipi aynı değilse!
                     if(!value.getClass().isPrimitive() && !fl.getType().isPrimitive()){
                         // Hedef özelliğin veri tipine çevirmeye çalış:
@@ -1243,11 +1249,18 @@ public class Reflector{
         }
         return result;
     }
+    private boolean isAboutDateTime(Class<?> cls){
+        if(cls == null)
+            return false;
+        if(cls == LocalDate.class || cls == LocalDateTime.class || cls == LocalTime.class || cls == Date.class)
+            return true;
+        return false;
+    }
 
 // ERİŞİM YÖNTEMLERİ:
     //ANA ERİŞİM YÖNTEMİ
     /**
-     * 
+     * {@code Reflector} nesnesini "singleton" olarak döndürür
      * @return {@code "Reflector"} servisi
      */
     public static Reflector getService(){
