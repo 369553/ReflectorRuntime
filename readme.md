@@ -1,18 +1,25 @@
+# ReflectorRuntime v3.0.0
+
 ## ReflectorRuntime nedir, ne işe yarar?
 
-- Bu kitâplık, Java'da çalışma zamânında verilerin nesnelere zerk (enjekte) edilmesi, nesneler üzerindeki değişikliklerin esnek ve kolay hâle gelmesi, nesne türetimi ve uyumluluk konularında yardımcı fonksiyonları içermektedir.
+- Tek cümleyle söylemek istersek;
+  
+  Düşük ve yüksek seviyeli nesne manipülasyonunu konforlu hâle getiren kitâplık
+  diyebilirim.
 
-- En temelde birkaç ana hedef için bu kitâplık yazılmıştır:
+- Kitâplık Java'da nesne manipülasyonlarını kapsayıcı, esnek ve dayanıklı biçimde destekleyen metotlar içermektedir.
+
+- Kitâplığın en temel hedefleri şunlardır:
   
-  1. Nesne üretimi
+  1. Veri dönüştürme işlemlerini daha esnek hâle getirme,
   
-  2. Verileri nesneye zerk etme
+  2. Nesnelerden alan verilerini kolayca toplama,
   
-  3. Yüksek seviyede esnek dönüşüm sağlayan yapılarla veriler arasındaki uyumsuzlukları gidererek veri tipi dönüşümü sağlama
+  3. Verileri nesnelere zerk etme (injection)
 
 - Yazar : Mehmet Akif SOLAK
 
-## Kitâplık Ne Tür Esneklikler Sağlıyor
+## Kitâplık Ne Tür Esneklikler Sağlıyor, İşte Birkaçı
 
 #### 1) Verileri Aktarılmış (Zerk Edilmiş, 'Injected') Nesne Üretimi
 
@@ -21,6 +28,10 @@
 - Bu esneklik ve dayanıklılıklardan bir kısmı şu şekildedir:
   
   - Hedef alana erişim izni yoksa, seçtiğiniz kodlama yöntemiyle (`Reflector.CODING_STYLE`) hedef alan için 'setter' yöntemini bulma ve verileri zerk etme
+  
+  - Hedef alan için üst sınıfları tarama
+  
+  - Hedef alan veyâ metot için erişim zorlaması yaparak veriyi nesneye zerk etme
   
   - Veriler arasındaki basit uyuşmazlıkları 'type casting' ile ortadan kaldırma
   
@@ -31,7 +42,7 @@
     - Java tarafından dönüşüm sağlanmayan dizi ve çok boyutlu dizi tipleri için dönüşüm sağlama
       (misal, `Integer[][]` -> `int[][]` veyâ `int[][]` -> `double[][]`)
     
-    - `List<T>` gibi koleksiyonları diziye, dizileri `List<T>` gibi koleksiyonlara çevirme; bunu yaparken boyut -> derinlik dönüşümü yapma;
+    - `List<T>` gibi koleksiyonları diziye, dizileri `List` gibi koleksiyonlara çevirme; bunu yaparken boyut -> derinlik dönüşümü yapma;
       misal, `List<List<Integer>>` -> `int[][]` gibi bir dönüşüm yapılabilir.
       İstenildiği takdirde, dönüşümü sağlanamayan elemanlar görmezden gelinebilir. Bu, karışık tipli dizilerden verilen tipe uygun olan elemanları seçilebilmesi için de kullanılabilir.
     
@@ -39,11 +50,11 @@
 
 #### 2) Esnek Veri Dönüşümü
 
-- Yukarıda zikredilen esneklikler bir değişkenin veri dönüşümünde de kullanılabilir
+- Yukarıda zikredilen esneklikler bir değişkenin veri dönüşümünde de kullanılabilir.
 
 #### 3) Nesnenin Alan Değerlerinin Alınması
 
-- Bir nesnenin verilen alan değerleri bir metodla kolayca alınabilir; alanların erişilebilir olması veyâ erişilebilir bir 'getter' yönteminin olması kâfîdir
+- Bir nesnenin verilen alan değerleri bir metotla kolayca alınabilir; alanlara alan üzerinden veyâ metot üzerinden verilen yapılandırmaya göre erişim sağlanabilir.
 
 #### 4) Dosya Yolundan Sınıf Yükleme
 
@@ -53,11 +64,7 @@
 
 - `List<T>` derinliklerini ve dizilerin boyutlarını öğrenmekte yardımcı olabilir.
 
-#### 6) Otomatik Veri Tipi Dönüşümü Analizi
-
-- Verilen iki veri tipinin birbirine otomatik olarak 
-
-#### 7) Kolay Nesne ve Dizi Üretimi
+#### 6) Kolay Nesne ve Dizi Üretimi
 
 - Verilen veri tipinde bir nesnenin veyâ verilen veri tipinde ve verilen boyutta bir dizinin üretilmesi için yardımcı fonksiyon barındırır.
 
@@ -90,62 +97,36 @@
 
 #### 2) Servise Erişim
 
-- Sınıf hizmetlerine erişmek için sınıfın müşahhas bir örneğini (her defasında aynı nesne) döndüren `Reflector.getService()` statik fonksiyonunu kullanın.
+- Sınıf hizmetlerine erişmek için sınıfın müşahhas bir örneğini (her defasında aynı nesne) döndüren `Reflector.getService()` statik fonksiyonunu kullanabilirsiniz.
+- Bunun yerine yeni bir `Reflector` nesnesi de oluşturabilirsiniz.
+- `Reflector.getService()` ile gelen statik nesne bir küresel değişkeni manipüle etmediğinden "thread-safe" olarak değerlendirilebilir.
 
-#### 3) Metodlar, İşlevler
+#### 3) Metotlar, İşlevler
 
-- Uzun olmaması için parametreler burada tek tek yazılmamıştır; kod içerisindeki kılavuz belgeler (dökümantasyon) detayları barındırmaktadır.
+- En temel kullanım çeşitleri için bâzı örnekler : HENÜZ EKLENMEDİ...
 
-- `produceInstance(...)` : Verilen sınıfın örneğini (nesnesini) oluşturur ve döndürür
+##### 3.1) Alan Verilerini Alma
 
-- `injectData(...)` : Verilen verileri, verilen nesneye zerk eder.
+- Alan verileri, `getValueOfFields()` metotlarıyla alınabilir:
+  
+  ```java
+  User u = new User();
+  Reflector serv = Reflector.getService();
+  Map<String, Object> data = serv.getValueOfFields(user, null,
+                          CODING_STYLE.CAMEL_CASE, true, true);
+  data.entrySet().forEach(System.out::println);
+  ```
 
-- `checkAndConvertListAndArray(...)` : Verilen derinlik bağımsız `List<T>` nesnesini, boyutu eşleşecek şekilde hedef veri tipindeki diziye çevirir; boyut bağımsız diziyi, derinliği, boyutu yansıtacak şekilde hedef tipteki listeye çevirir.
+- Bu metotta alan isimlerine `null` verdiğinizde tüm alanlar alınır; fakat alan isim listesi yerine `Field[]` tipinde bir parametre bekleyen diğer metotta bu geçerli değildir.
 
-- `findConstructorForNoParameter(...)` : Verilen sınıfın parametresiz yapıcı yöntemini -eğer varsa ve erişilebilir ise- döndürür.
+- Alanlar bu sınıfın veyâ bu sınıfın üst sınıflarının alanları olabilir. Bu durumda `java.lang.Object` dâhil olmamak üzere `java.lang.Object`'e kadar üst sınıfların taranmasını metodun `scanSuperClasses` parametresiyle belirtebilirsiniz.
 
-- `getCastedObject(...)` : Verilen veriyi, verilen hedef sınıfa çevirmeye çalışır. Bunun için birden fazla yöntem denenir.
+- Alanlar erişim belirteciyle izole edilmiş olabilir; bu durumda `Reflector` alan için bir "**getter**" metodu arayıp, çalıştırır.
 
-- `getCastedObjectFromString(...)` : Metîn olarak verilen veriyi, verilen hedef sınıf nesnesine çevirmeye çalışır.
+- Eğer alana veyâ "**getter**" metoduna zorla erişmek isterseniz `forceAccessibility` parametresine `true` veriniz. Bu, `private` alana ve `private` metoda erişim sağlayabilir. Kullandığınız güvenlik yöneticisi (`SecurityManager`) buna izin veriyor olabilir.
 
-- `getClassesOnTheAppPath()` : Uygulama kök dizini altındaki tüm sınıfları yükleyip, döndürür.
+- Çoğu kez alanlar dış dünyâdan izole edilirler (`private` belirteciyle). Bu durumda ilgili alanın "**getter**" metodunu arayarak alanın verisini almak için bu metodun nasıl yazıldığını bilmemiz lazımdır. Bu sebeple `CODING_STYLE codingStyle` parametresiyle kodlama biçimi belirtmelisiniz.
 
-- `getClassesOnThePath(...)` : Verilen dizin altındaki sınıfları bulup, yükler, döndürür.
+##### 3.2) Veri Dönüşümü
 
-- `getDateObjectFromString(...)` : ISO veyâ SQL formatındaki târih - saat, târih ve saat metînlerini verilen hedef sınıfa çevirir.
-
-- `getDateTimeTextAsSQLStyle(...)` : Verilen zamân verisini, SQL ile veri eklenirken kabûl edilen biçimdeki metne çevirir.
-
-- `getDimensionOfArray(...)` : Verilen dizinin boyut bilgisini döndürür.
-
-- `getDimensionOfList(...)` : Verilen listenin elemanlarını tarayarak listenin derînliğini araştırır, eğer dizi elemanı bir liste ise, derinlik bir arttırılır ve o da taranır
-
-- `getEnumByData(..)` : Metîn biçimindeki `Enum` verisini hedef `Enum` sınıfının nesnesi olarak döndürür.
-
-- `getFieldValuesBasicly(...)` : Verilen sınıfın özelliklerini toplar ve `Map` biçiminde döndürür.
-
-- `getMethodNameDependsCodeStyle(...)` : İsmi verilen bir özelliğin ('attribute') 'getter' veyâ 'setter' yöntem ismini döndürür
-
-- `getPrimitiveClassFromWrapper(...)` Verilen sarmalayıcı sınıfın temel sınıfını döndürür.
-
-- `getProducedInstanceForEnum(...)` : Verilen `Enum` sınıfından bir değeri nesne olarak döndürür.
-
-- `getSpecifiedFields(...)` : Verilen sınıfın yalnızca ismi verilen alanlarını `Field` nesnelerinden oluşan liste biçiminde döndürür.
-
-- `getValueOfFields(...)` : Verilen nesnenin ismi veyâ alan nesnesinin kendisi olarak verilen alanlarının değerlerini `Map` biçiminde döndürür.
-
-- `getWrapperClassFromPrimitiveClass(...)` : Verilen temel sınıfın sarmalayıcı sınıfını döndürür.
-
-- `isPairingAutomatically(...)` : Verilen iki sınıfın herhangi bir casting işlemi olmaksızın birbirine otomatik olarak dönüşüp, dönüşmediğini denetler. Java otomatik sarmalama özelliğiyle sarmalanan sınıf ile temel hâli eşleşir.
-
-- `isWrapperClassOfBasic` : Verilen sınıfın temel veri tipi sınıfının sarmalayıcısı olup, olmadığı sorgulanır.
-
-- `produceArray(...)` : Verilen sınıfta, verilen uzunlukta dizi oluşturulur.
-
-- `produceInjectedArray(...)` : Verilen hedef sınıf tipinde verilen verilerin zerk edildiği bir boyut bağımsız dizi döndürür.
-
-- `produceInjectedList(...)` : Verilen dizi verisinden hareketle, uygun derinlikli, verileri aktarılmış ve hedef sınıf tipinde olan bir `List<T>` nesnesi oluşturulur.
-
-- `produceInjectedObject(...)` : Verilen nesneye verilen alan özelliklerini zerk eder.
-
-- 
+- ... (devâm edilecek inşâAllâh)
