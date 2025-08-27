@@ -37,7 +37,7 @@ import java.util.TreeSet;
  * 
  * @author Mehmet Âkif SOLAK
  * Düşük ve yüksek seviyeli nesne manipülasyonunu konforlu hâle getiren kitâplık
- * @version 3.0.0
+ * @version 3.0.1
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -458,6 +458,17 @@ public class Reflector{
             return null;
         if(target == String.class)
             return ((T) new String(data));
+        if(target.equals(Class.class)){
+            Object loaded = getLoadedClass(data, target.isEnum());
+            if(loaded == null)
+                return null;
+            try{
+                return (T) loaded;
+            }
+            catch(ClassCastException exc){
+                return null;
+            }
+        }
         if(target.isEnum()){
             return getEnumByData(target, data);
         }
@@ -1399,6 +1410,29 @@ public class Reflector{
         }
         return false;
     }
+    /**
+     * Verilen isimdeki {@code enum} sınıfını döndürür
+     * @param className Sınıf ismi
+     * @return Verilen isimdeki {@code enum} sınıfı veyâ {@code null}
+     */
+    public Class<?> getEnumClass(String className){
+        return getLoadedClass(className, true);
+    }
+    /**
+     * Verilen isimdeki sınıfı döndürür<br>
+     * @param className Sınıf ismi
+     * @param isEnumClass Sınıf {@code enum} sınıfı ise {@code true} verilmeli
+     * @return Verilen isimdeki sınıf veyâ {@code null}
+     */
+    public Class<?> getLoadedClass(String className, boolean isEnumClass){
+        try{
+            return ClassLoader.getSystemClassLoader().loadClass(className);
+        }
+        catch(ClassNotFoundException exc){
+            System.err.println("Sınıf bulunamadı : " + exc.toString());
+            return null;
+        }
+    }
 
     // ARKAPLAN İŞLEM YÖNTEMLERİ:
     /**
@@ -1634,18 +1668,6 @@ public class Reflector{
         String firstLetter = s.substring(0, 1);
         firstLetter = firstLetter.toUpperCase(Locale.ENGLISH);
         return (firstLetter + s.substring(1));
-    }
-    private Class<?> getEnumClass(String className){
-        return getLoadedClass(className, true);
-    }
-    private Class<?> getLoadedClass(String className, boolean isEnumClass){
-        try{
-            return ClassLoader.getSystemClassLoader().loadClass(className);
-        }
-        catch(ClassNotFoundException exc){
-            System.err.println("Sınıf bulunamadı : " + exc.toString());
-            return null;
-        }
     }
     private List<Class<?>> getClassesOnTheRoot(File root, String fullNameFromRoot, boolean isAppRoot){
         if(root == null)
