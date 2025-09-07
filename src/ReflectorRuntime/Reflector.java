@@ -25,19 +25,22 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 
 /**
  * 
  * @author Mehmet Âkif SOLAK
  * Düşük ve yüksek seviyeli nesne manipülasyonunu konforlu hâle getiren kitâplık
- * @version 3.0.1
+ * @version 3.1.0
  */
 public class Reflector{
     private static Reflector serv;// service
@@ -124,6 +127,7 @@ public class Reflector{
      * - {@code SortedSet} için {@code TreeSet}, {@code Set} için {@code HashSet},<br>
      * - {@code Queue} için {@code LinkedList},<br>
      * - {@code Collection} için {@code ArrayList} üretilir<br>
+     * - {@code UUID} için rastgele bir {@code UUID} üretilir
      * @param <T> Örneği istenen sınıf, tip olarak
      * @param target Nesnesi üretilmek istenen sınıf
      * @return Verilen sınıfın ilklendirilmiş bir örneği veya {@code null}
@@ -170,6 +174,8 @@ public class Reflector{
                     obj = (T) new HashSet();
                 }
             }
+            else if(target == UUID.class)
+                return (T) UUID.randomUUID();
             else{// Yapıcı yöntemi bulup, çalıştırarak yeni nesne elde etmeye çalış
                 Constructor noParamCs = getConstructorForNoParameter(target);// İlk olarak parametresiz yapıcı yöntem ara
                 if(noParamCs != null){
@@ -478,6 +484,12 @@ public class Reflector{
         else if(target.equals(File.class)){
             return (T) new File(data);
         }
+        else if(target.equals(UUID.class)){
+            try{
+                return (T) UUID.fromString(data);
+            }
+            catch(IllegalArgumentException exc){return null;}
+        }
         try{
             data = data.trim();// Boşluklar varsa kaldır
             Object casted = null;
@@ -632,14 +644,58 @@ public class Reflector{
      * {@code Array} ve {@code List} arasında dönüşümü destekler<br>
      * Bu ilâve özellikler Java tarafından desteklenmeyen pek çok dönüşümün
      * yapılabilmesini sağlar<br>
+     * Eğer hedef olarak kullanıcı tanımlı tip verilirse ve verilen {@code value}
+     * {@code Map} tipinde bir nesneyse, hedef sınıfın örneği üretilip, veri
+     * zerk edilmeye çalışılır<br>
+     * Hedef kullanıcı tanımlı bir sınıf ise şu metodu kullanmanız önerilir:<br>
+     * {@code getCastedObject(Class<T> targetClass, Object value, CODING_STYLE codingStyle)}
      * @param <T> Hedef, temsil eden veri tipi
      * @param targetClass Hedef sınıf
      * @param value Veri
      * @return Hedef tipinden bir nesneye dönüştürülmüş veri, veyâ {@code null}
      */
-    public <T> T getCastedObject(Class<T> targetClass, Object value){// Verilen değeri hedef tipe dönüştürme
-        if(value == null)
+    public <T> T getCastedObject(Class<T> targetClass, Object value){
+        return getCastedObject(targetClass, value, CODING_STYLE.CAMEL_CASE);
+    }
+    /**
+     * Verilerin birbirine dönüştürülebildiği durumlar için dönüşüm desteklenir<br>
+     * İlâveten, {@code Enum} verisi metîn biçimindeyse, karşılığı döndürülür<br>
+     * Normalde birbirine dönüştürülebilir olan nesnelerin dizilerini dönüştürme
+     * özelliği vardır<br>
+     * {@code Array} ve {@code List} arasında dönüşümü destekler<br>
+     * Bu ilâve özellikler Java tarafından desteklenmeyen pek çok dönüşümün
+     * yapılabilmesini sağlar<br>
+     * Eğer hedef olarak kullanıcı tanımlı tip verilirse ve verilen {@code value}
+     * {@code Map} tipinde bir nesneyse, hedef sınıfın örneği üretilip, veri
+     * zerk edilmeye çalışılır<br>
+     * Eğer hedef tip kullanıcı tanımlı bir tip ise, kodlama stilini doğru
+     * vermeye dikkat ediniz<br>
+     * @param <T> Hedef, temsil eden veri tipi
+     * @param targetClass Hedef sınıf
+     * @param value Veri
+     * @param codingStyle "setter" metodu için kodlama stili
+     * @return Hedef tipinden bir nesneye dönüştürülmüş veri, veyâ {@code null}
+     */
+    public <T> T getCastedObject(Class<T> targetClass, Object value, CODING_STYLE codingStyle){// Verilen değeri hedef tipe dönüştürme
+        if(value == null || targetClass == null)
             return null;
+        if(value.getClass().equals(targetClass))
+            return (T) value;
+        if(!isNotUserDefinedClass(targetClass)){// Kullanıcı tanımlı bir sınıf
+                                                // hedef olarak verildiyse;
+            try{
+                if(value instanceof Map){// Veriler harita biçiminde verildiyse;s
+                    return (T) produceInjectedObject(targetClass, (Map) value, codingStyle);
+                }
+            }
+            catch(ClassCastException exc){
+                System.err.println("Verileri kullanıcı tanımlı nesne"
+                    + "dönüştürebilmek için veriler "
+                    + "Map<String, ? extends Object> formatında olmalıdır:" + exc.toString());
+                // burada return yapılması uygun görünüyor; yapılmaması gereksiz işlem midir
+                // yoksa diğer metotların denenmesi sonucu başarı elde edildiği durum olabilir mi?
+            }
+        }
         if(isAboutListArrayConverting(targetClass, value)){
             Object casted = checkAndConvertListAndArrayFixed(value, targetClass);
             if(casted != null){
@@ -701,14 +757,26 @@ public class Reflector{
     }
     /**
      * Verilen listenin elemanlarını tarayarak listenin derînliğini araştırır<br>
-     * Eğer dizi elemanı bir liste ise, derinlik bir arttırılır ve o da taranır<br>
+     * Eğer eleman bir liste ise, derinlik bir arttırılır ve o da taranır<br>
      * @param list Liste
      * @return Listenin derînliği, liste {@code null} ise {@code 0} döndürülür
      */
+    @Deprecated
     public int getDimensionOfList(List<?> list){
         if(list == null)
             return 0;
         return findDepthWhole(list, 1);
+    }
+    /**
+     * Verilen koleksiyonun elemanları taranarak derînliği araştırılır<br>
+     * Eğer eleman bir koleksiyon ise, derinlik bir arttırılır ve o da taranır<br>
+     * @param collection Koleksiyon
+     * @return Derinlik, {@code collection} {@code null} ise {@code 0} döndürülür
+     */
+    public int getDimensionOfCollection(Collection<?> collection){
+        if(collection == null)
+            return 0;
+        return findDepthWhole(collection, 1);
     }
     /**
      * Verilen veri tipinin temel veri tipi veyâ sarmalayıcısı olup, olmadığını
@@ -724,32 +792,38 @@ public class Reflector{
         return false;
     }
     /**
-     * Verilen listenin elemanlarını tarayarak listenin derînliği araştırılır<br>
-     * Eğer dizi elemanı bir liste ise, derinlik bir arttırılır ve o da taranır<br>
-     * @param list Liste
+     * Verilen koleksiyonun elemanlarını taranarak derînliği araştırılır<br>
+     * Eğer eleman bir koleksiyon ise, derinlik bir arttırılır ve o da taranır<br>
+     * @param collection Koleksiyon ({@code Collection} nesnesi)
      * @param depth Derinlik, yöntemi çağırırken {@code 1} değeri verilmeli
-     * @return Listenin derînliği, liste {@code null} ise {@code 0} döndürülür
+     * @return Derinlik, {@code collection} {@code null} ise {@code 0} döndürülür
      */
-    public int findDepthWhole(List<?> list, int depth){
-        if(list == null)
+    public int findDepthWhole(Collection<?> collection, int depth){
+        if(collection == null)
             return 0;
-        int len = list.size();
+        int len = collection.size();
         if(len <= 0)
             return depth;
         int[] lengths = new int[len];
-        for(int sayac = 0; sayac < len; sayac++){
-            Object element = list.get(sayac);
+        int sayac = 0;
+        Iterator<?> iter = collection.iterator();
+        while(iter.hasNext()){
+            Object element = null;
+            try{
+                element = iter.next();
+            }
+            catch(NoSuchElementException exc){}
             if(element == null)
                 lengths[sayac] = depth;
-            else if(list.get(sayac) instanceof List)
-                lengths[sayac] = findDepthWhole((List) list.get(sayac), depth + 1);
+            else if(element instanceof Collection)
+                lengths[sayac] = findDepthWhole((Collection) element, depth + 1);
             else
                 lengths[sayac] = depth;
         }
         int max = lengths[0];
-        for(int sayac = 1; sayac < len; sayac++){
-            if(lengths[sayac] > lengths[sayac - 1])
-                max = lengths[sayac];
+        for(int s2 = 1; s2 < len; s2++){
+            if(lengths[s2] > lengths[s2 - 1])
+                max = lengths[s2];
         }
         return max;
     }
@@ -1395,6 +1469,52 @@ public class Reflector{
         return matched1st & matched2nd;
     }
     /**
+     * Verilen sınıfın {@code Map} veyâ {@code Collection} sınıfının alt sınıfı
+     * olup, olmadığı sorgulanır
+     * @param cls Sınıf
+     * @return Koleksiyon veyâ {@code Map} ise {@code true} değilse {@code null}
+     */
+    public boolean isCollectionOrMap(Class<?> cls){
+        if(!isMap(cls))
+            return isCollection(cls);
+        else
+            return true;
+    }
+    /**
+     * Verilen sınıfın {@code Collection} alt sınıfı olup, olmadığı sorgulanır
+     * @param cls Kontrol edilmesi istenen sınıf
+     * @return Verilen sınıf {@code Map} ise {@code true}, değilse {@code false}
+     */
+    public boolean isCollection(Class<?> cls){
+        return isAsGivenSubclass(cls, Collection.class);
+    }
+    /**
+     * Verilen sınıfın {@code Map} alt sınıfı olup, olmadığı sorgulanır
+     * @param cls Kontrol edilmesi istenen sınıf
+     * @return Verilen sınıf {@code Map} ise {@code true}, değilse {@code false}
+     */
+    public boolean isMap(Class<?> cls){
+        return isAsGivenSubclass(cls, Map.class);
+    }
+    /**
+     * Verilen sınıfın, verilen hedef sınıfın alt sınıfı olup, olmadığı
+     * sorgulanır<br>
+     * @param cls Kontrol edilmesi istenen sınıf
+     * @param target Hedef sınıf
+     * @return Verilen sınıf hedef sınıfın alt sınıfıysa {@code true},
+     * değilse {@code false}
+     */
+    public boolean isAsGivenSubclass(Class<?> cls, Class<?> target){
+        if(cls == null || target == null)
+            return false;
+        try{
+           return cls.asSubclass(target) != null;
+        }
+        catch(ClassCastException exc){
+            return false;
+        }
+    }
+    /**
      * Verilen nesnenin verilen koleksiyon içerisinde olup, olmadığına bakılır<br>
      * @param <T> Koleksiyonun "generic" sınıfını simgeleyen tip
      * @param list Verinin aranacağı koleksiyon
@@ -1433,6 +1553,66 @@ public class Reflector{
             return null;
         }
     }
+    /**
+     * Bu metodun amacı, generic tipli koleksiyon / harita nesnelerine
+     * veri zerki işleminin yapılmasını sağlamaktır<br>
+     * Bu, normal yollarla garantili yapılamadığından bu metot kullanılmalıdır
+     * @param fl Hedef alan
+     * @param value Hedef alana zerk edilmek istenen değer
+     * @return Hedef alanla tip uyumlu nesne veyâ {@code null}
+     */
+    public Object getCastedCollectionOrMap(Field fl, Object value){
+        if(fl == null)
+            return null;
+        return getCastedCollectionOrMap(fl.getType(), fl.getGenericType().getTypeName(), value);
+    }
+    /**
+     * Bu metodun amacı, generic tipli koleksiyon / harita nesnelerine
+     * veri zerki işleminin yapılmasını sağlamaktır<br>
+     * Bu, normal yollarla garantili yapılamadığından bu metot kullanılmalıdır
+     * @param fl Hedef alan
+     * @param value Hedef alana zerk edilmek istenen {@code Collection} nesnesi
+     * @return Hedef alanla tip uyumlu {@code Collection} veyâ {@code null}
+     */
+    public Collection getCastedCollection(Field fl, Object value){
+        return (Collection) getCastedCollectionOrMap(fl, value);
+    }
+    /**
+     * Bu metodun amacı, generic tipli koleksiyon / harita nesnelerine
+     * veri zerki işleminin yapılmasını sağlamaktır<br>
+     * Bu, normal yollarla garantili yapılamadığından bu metot kullanılmalıdır
+     * @param fl Hedef alan
+     * @param value Hedef alana zerk edilmek istenen {@code Map} nesnesi
+     * @return Hedef alanla tip uyumlu {@code Collection} veyâ {@code null}
+     */
+    public Map getCastedMap(Field fl, Object value){
+        return (Map) getCastedCollectionOrMap(fl, value);
+    }
+    /**
+     * Verilen isimle belirtlilen sınıfı yükler<br>
+     * İsim 'generic' tip belirtimi içeriyorsa, orayı kaldırır
+     * @param nameOfClass Sınıf ismi
+     * @return Yüklenen sınıf veyâ {@code null}
+     */
+    public Class<?> getClassFromName(String nameOfClass){
+        if(nameOfClass == null)
+            return null;
+        if(nameOfClass.isEmpty())
+            return null;
+        // 'generic' kısmı kaldırmak gerekiyor:
+        // Aşağıdaki kod zorunludur, ikinci parçalama ('>' karakterine göre)
+        // işlemi de mutlaka olmalıdır; bir metottaki işlem sebebiyle!
+//        nameOfClass = nameOfClass.trim().split("<")[0].trim().split(">")[0];// Güvenlik tedbîri, zorunlu!
+        nameOfClass = nameOfClass.trim().split("<")[0];// Güvenlik tedbîri, zorunlu!
+        Class<?> cls = null;
+        if(nameOfClass.equalsIgnoreCase("?") || nameOfClass.equalsIgnoreCase("? extends Object"))
+            cls = Object.class;
+        if(cls == null)
+            cls = getLoadedClass(nameOfClass, false);
+        if(cls == null)
+            cls = getLoadedClass(nameOfClass, true);
+        return cls;
+    }
 
     // ARKAPLAN İŞLEM YÖNTEMLERİ:
     /**
@@ -1454,8 +1634,8 @@ public class Reflector{
      * nesneye zerk edilecekse {@code true} olmalıdır.<br>
      * @param instance {@code useGivenInstance} {@code true} ise hedef nesne
      * durumunda bu yöntemin hangi kodlama standardına göre aranacağı bilgisi<br>
-     * @param scanSuperClasses
-     * @param forceAccessibility
+     * @param scanSuperClasses Üst sınıfların taranması durumu
+     * @param forceAccessibility Erişimin zorlanmasını ifâde eden parametre
      * @return Verilen verilerin zerk edildiği sınıf örneği veyâ {@code null}
      */
     private <T> T produceInjectedObject(Class<T> targetClass, Map<String, ? extends Object> data,
@@ -1502,6 +1682,16 @@ public class Reflector{
             boolean execSetter = false;// "'setter' metodunu çalıştır" bayrağı
             boolean forceCast = false;// 'Veriyi çevirmeye zorla' bayrağı
             boolean isSuccessful = false;// 'İşlem başarılı oldu' bayrağı
+            boolean isCollectionOrMap = isCollectionOrMap(clsField);// Değerin sınıfı koleksiyon veyâ harita ise 'true' olmalıdır
+            // Koleksiyonlarda farklı tiplerdekiler de zerk edilebildiğinden veriyi dönüştürmek gerekiyor:
+            if(isCollectionOrMap)
+                value = getCastedCollectionOrMap(fl, value);
+            if(clsField.equals(UUID.class) && value.getClass().equals(String.class)){
+                try{
+                    value = UUID.fromString((String) value);
+                }
+                catch(IllegalArgumentException excForUUID){}
+            }
             try{
                 fl.set(obj, value);
                 isSuccessful = true;
@@ -1573,7 +1763,7 @@ public class Reflector{
                                     invokeMethod(obj, setterMethod, new Object[]{casted}, forceAccessibility, resultOfInvoking);
                                     isSuccessful = (Boolean) resultOfInvoking.get("result");
                                     if(!isSuccessful){
-                                        System.out.println("Tüm çabalara rağmen veri hedef alana zerk edilemedi : " + fl.getName());
+                                        System.err.println("Tüm çabalara rağmen veri hedef alana zerk edilemedi : " + fl.getName());
                                     }
                                 }
                             }
@@ -1593,7 +1783,7 @@ public class Reflector{
                 obj = targetEnum.getEnumConstants()[0];
             }
             catch(ArrayIndexOutOfBoundsException exc){
-                System.err.println("exc... : " + exc.toString());
+                System.err.println("exc : " + exc.toString());
             }
         }
         return obj;
@@ -1625,6 +1815,7 @@ public class Reflector{
      * - Verilen sınıf sık kullanılan zamân veri tiplerinden biriyse<br>
      * - Verilen sınıf {@code java.io.File}, {@code java.math.BigInteger} gibi 
      * özel amaçlı bir sınıf ise<br>
+     * - Verilen sınıf {@code Class} sınıfıysa
      * @param cls Kontrol edilmek istenen sınıf
      * @return Sınıf kullanıcı tanımlı bir sınıf değilse {@code true}, aksi hâlde {@code false}
      */
@@ -1636,7 +1827,7 @@ public class Reflector{
             if(sourceClassName.equals(type))
                 return true;
         }
-        if(cls.isArray() || cls.isEnum())// Bir dizi veyâ sâbit değerli sınıf (enum) ise
+        if(cls.isArray() || cls.isEnum() || cls.equals(Class.class))// Bir dizi veyâ sâbit değerli sınıf (enum) ise
             return true;
         switch(sourceClassName){// Bâzı özel dosya tipleri temel veri tipi sayılır
             case "java.io.File" : return true;
@@ -1647,6 +1838,7 @@ public class Reflector{
             case "java.sql.Date" : return true;
             case "java.math.BigDecimal" : return true;
             case "java.math.BigInteger" : return true;
+            case "java.util.UUID" : return true;
         }
         List<Class<?>> otherBasics = new ArrayList<Class<?>>();
         otherBasics.add(List.class);
@@ -1657,8 +1849,7 @@ public class Reflector{
         for(Class<?> clsCollection : otherBasics){
             try{
                 Class<?> castedClass = cls.asSubclass(clsCollection);
-                if(castedClass != null)
-                    return true;
+                return (castedClass != null);
             }
             catch(ClassCastException exc){}
         }
@@ -1788,6 +1979,284 @@ public class Reflector{
         catch(SecurityException exc){
             System.err.println("exc : " + exc.toString());
         }
+    }
+    /**
+     * Bu metodun amacı, generic tipli koleksiyon / harita nesnelerine
+     * veri zerki işleminin yapılmasını sağlamaktır<br>
+     * Bu, normal yollarla garantili yapılamadığından bu metot kullanılmalıdır
+     * @param target Hedef sınıf, en dıştaki sarmalayıcı sınıf:<br>
+     * {@code instanceOfField.getType()} ile alınabilir<br>
+     * @param genericTypeName {@code Field} alanının jenerik tip ismi:<br>
+     * {@code instanceOfField.getGenericType().getTypeName()} ile alınabilir<br>
+     * @param value Hedef alana zerk edilmek istenen değer
+     * @return Hedef alanla tip uyumlu veri veyâ {@code null}
+     */
+    private Object getCastedCollectionOrMap(Class<?> target, String genericTypeName, Object value){
+        if(genericTypeName == null || value == null || target == null)
+            return null;
+        boolean isMap = false;
+        if(isMap(target))
+            isMap = true;
+        else if(!isCollection(target))
+            return null;
+        if(extractTypeInTheMiddle(genericTypeName).isEmpty()){// Gelen koleksiyon veyâ Map generic tipe sâhip değilse;
+            return value;// Gelen veriyi olduğu gibi döndür
+        }
+        if(!isMap){
+            Map<Integer, String> depthToClassName = new HashMap<Integer, String>();
+            Collection asCollection = (Collection) value;
+            if(asCollection.size() == 0)
+                return value;
+            int depth = getDimensionOfCollection(asCollection);
+            for(int sayac = 0; sayac < depth; sayac++){
+                genericTypeName = extractTypeInTheMiddle(genericTypeName);
+                depthToClassName.put(sayac, genericTypeName);
+            }
+            Collection main = (Collection) produceInstance(target);// Alana zerk edilecek ana nesne
+            return injectDeepForCollection(depthToClassName, main, asCollection);
+        }
+        else{// Hedef Map ise;
+            // keySet ve value için ayrı ayrı derinlikleri bul
+            // keySet ve value için ayrı ayrı derinliğe dayalı dönüşümü yap
+            // birleştir; fakat hiza bozulmuş olabilir; gerekiyorsa ek yapı kur
+            Map asMap = ((Map) value);
+            if(asMap.size() == 0)
+                return value;
+            
+            // Sıralamayı garanti etmiyor; başka yolu varsaonu kullan:
+            ArrayList keys = new ArrayList();
+            ArrayList vals = new ArrayList();
+            for(Object obj : asMap.keySet()){
+                keys.add(obj);
+                vals.add(asMap.get(obj));
+            }
+            int depthOfKeys = getDimensionOfCollection(keys);
+            int depthOfVals = getDimensionOfCollection(vals);
+            
+            Collection keyCollection = (Collection) produceInstance(List.class);
+            Collection valCollection = (Collection) produceInstance(List.class);
+            String bothGenerics = extractTypeInTheMiddle(genericTypeName);
+            String[] arr = splitGenericTypeNameByRightCommaForMap(bothGenerics);
+            String keyGenericName = arr[0];
+            String valGenericName = arr[1];
+            
+            {// anahtarları tutan koleksiyon için:
+                Map<Integer, String> depthToClassName = new HashMap<Integer, String>();
+                depthToClassName.put(0, keyGenericName);
+                for(int sayac = 1; sayac < depthOfKeys; sayac++){
+                    keyGenericName = extractTypeInTheMiddle(keyGenericName);
+                    depthToClassName.put(sayac, keyGenericName);
+                }
+                injectDeepForCollection(depthToClassName, keyCollection, keys);
+            }
+            
+            {// değerleri tutan koleksiyon için:
+                Map<Integer, String> depthToClassName = new HashMap<Integer, String>();
+                depthToClassName.put(0, valGenericName);
+                for(int sayac = 1; sayac < depthOfVals; sayac++){
+                    valGenericName = extractTypeInTheMiddle(valGenericName);
+                    depthToClassName.put(sayac, valGenericName);
+                }
+                injectDeepForCollection(depthToClassName, valCollection, vals);
+            }
+            
+            // Anahtar - değer koleksiyonlarının birleştirilmesi:
+            Iterator iter = keyCollection.iterator();
+            Iterator iterOnVals = valCollection.iterator();
+            asMap.keySet().removeAll(asMap.keySet());// Tüm eski elemanları kaldır
+            while(iter.hasNext()){
+                try{
+                    asMap.put(iter.next(), iterOnVals.next());
+                }
+                catch(NoSuchElementException | NullPointerException exc){}
+            }
+            return asMap;
+        }
+    }
+    /**
+     * {@code injectAtTargetDeep} metodunu çalıştırmak için ön hâzırlık yapar<br>
+     * Daha fazla bilgi için {@code injectAtTargetDeep} metoduna bakınız<br>
+     * @param depthToClassName Derinlik - hedef sınıf haritası
+     * @param containerCollection İşlem sonunda döndürülecek ana koleksiyon
+     * @param value Verileri barındıran koleksiyon
+     * @return Jenerik tipleri dönüştürülmüş koleksiyon veyâ {@code null}
+     */
+    private Object injectDeepForCollection(Map<Integer, String> depthToClassName, Collection containerCollection, Collection value){
+        if(depthToClassName == null || containerCollection == null || value == null)
+            return null;
+        int depth = depthToClassName.size();
+        Class<?> ultimateTarget = getClassFromName(depthToClassName.get(depth - 1));
+        if(depth == 0 || ultimateTarget == null)
+            return containerCollection;
+        injectAtTargetDeep(depthToClassName, containerCollection, value, depth - 1, ultimateTarget, 0);
+        return containerCollection;
+    }
+    /**
+     * Derinliğe dayalı zerk (injection) işlemi yapar. Şunlar dikkate alınır<br>
+     * - Verilen derinlik - hedef sınıf haritasına bakarak hangi derinlikte
+     * o derinlikteki verinin hangi sınıfa çevrileceğini saptar<br>
+     * - Eklemeler {@code mainObj} üzerine yapılır; bu nesne ana nesnedir<br>
+     * - Gerekli alt koleksiyonlar derinlik haritasına bakarak oluşturulur<br>
+     * - En son en alttaki elemanlar hedef tipe dönüştürülür ve bir üst
+     * derinlikteki koleksiyonda ilgili yere eklenir<br>
+     * Bilinmesi gereken önemli şeyler:<br>
+     * - Hedef derinlik, en alt derinlik olarak verilmelidir<br>
+     * - Mevcut derinlik 0 olarak verilmelidir<br>
+     * - Derinlik - hedef sınıf haritasında en iç derinlik yüksek numaralı
+     * anahtarda tutulmalıdır<br>
+     * Bu sınıf alt seviye yardımcı sınıftır; bu sınıfı kullanarak işlemi
+     * kolaylaştıran {@code injectDeepForCollection} ve onu da kullanarak
+     * işlemin karmaşıklığını sıfırlayan {@code getCastedCollectionOrMap} vardır
+     * @param depthToTargetClassName Derinlik - hedef sınıf haritası
+     * @param mainObj Verilerin ekleneceği ana eleman
+     * @param fromObj Verilerin bulunduğu, alt elemanları veyâ kendisi hedef
+     * tipe uymayan koleksiyon
+     * @param targetDepth Derinlik - hedef sınıf haritası
+     * @param targetClass Hedef sınıf (en içteki koleksiyonun generic tipi)
+     * @param currentDepth Mevcut derinlik, 0 verilmelidir.
+     */
+    private void injectAtTargetDeep(Map<Integer, String> depthToTargetClassName,
+            Collection mainObj, Collection fromObj, int targetDepth,
+            Class<?> targetClass, int currentDepth){
+        Iterator iter = null;
+        try{
+            iter = fromObj.iterator();
+        }
+        catch(ClassCastException | NullPointerException exc){
+            System.err.println("Derinliğe dayalı zerk için verilen kaynak koleksiyon üzerinde dolaşılamıyor : " + exc.toString());
+            return;
+        }
+//        System.out.println("current : " + currentDepth + "\tmainObj : " + mainObj + "\tfromObj : " + fromObj +
+//                "\ttargetDepth : " + targetDepth + "\tdepthMap : " + depthToTargetClassName);
+        while(iter.hasNext()){
+            Object value = iter.next();
+            if(currentDepth == targetDepth){
+                if(value == null)
+                    mainObj.add(value);
+                else{
+                    Object casted = value;
+                    Class<?> clsNewTarget = getClassFromName(depthToTargetClassName.get(currentDepth));
+                    boolean cast = false;
+                    
+                    if(value instanceof Map){// Zerk edilmek istenen değer bir harita ise;-
+                        if(clsNewTarget != null){// Hedef sınıf bir türlü bulunamıyorsa, veriyi ekleme
+                            try{
+                                if(clsNewTarget.asSubclass(Map.class) != null){
+                                    casted = getCastedCollectionOrMap(value.getClass(), depthToTargetClassName.get(currentDepth), value);
+                                    mainObj.add(casted);
+                                }
+                                else
+                                    cast = true;
+                            }
+                            catch(ClassCastException exc){
+                                cast = true;
+                            }
+                        }
+                    }
+                    if(cast || clsNewTarget != null){
+                        casted = getCastedObject(targetClass, value);
+                        mainObj.add(casted);
+                    }
+                }
+//                return mainObj;// Bu satıra gerek yok, metodun bir şey döndürmesine ihtiyaç yok
+            }
+            else if(value instanceof Collection){// Eğer alt nesne bir koleksiyon ise;
+                try{
+                    Collection subObj = (Collection) produceInstance(getClassFromName(depthToTargetClassName.get(currentDepth)));
+                    mainObj.add(subObj);
+                    injectAtTargetDeep(depthToTargetClassName, (Collection) subObj, (Collection) value, targetDepth, targetClass, currentDepth + 1);
+                }
+                catch(NullPointerException | ClassCastException exc){
+                    System.err.println("Derinlik bazlı zerk işlemi için hatâ alındı : " + exc.toString());
+                }
+            }
+        }
+    }
+    /**
+     * Verilen jenerik ismin jenerik kısmını alır ve döndürür<br>
+     * Bir alanın jenerik tip ismine şu şekilde erişilebilir:<br>
+     * {@code instanceOfField.getGenericType().getTypeName()}
+     * @param genericTypeName Jenerik (generic) tip ismi
+     * @return Eğer varsa verilen nesnenin jenerik tip ismi, yoksa boş metin
+     */
+    private String extractTypeInTheMiddle(String genericTypeName){
+        boolean isIn = false;
+        int deep = 0;// Bu, en dıştaki <> işâretleri dışındaki derinliği tutar
+        int theMostDeep = 0;
+        StringBuilder sB = new StringBuilder();// Etiket içerisindeki veri tipini almak için;
+        for(char c : genericTypeName.toCharArray()){
+            if(c == '<'){// Açılış etiketiyle karşılaşıldıysa;
+                if(!isIn){// Eğer en dışarıdaysak;
+                    isIn = true;// içeri girdiğimizi işâretle
+                    continue;
+                }
+                else{// Zâten içerideyken, açılış karakteri geldiyse;
+                    deep++;// Derinliği arttır
+                    if(theMostDeep < deep)
+                        theMostDeep = deep;// Algoritmanın kaç defa çalışması
+                        // gerektiğini bilmek için en yüksek derinliği not et
+                }
+            }
+            if(c == '>'){// Kapanış karakteri geldiyse;
+                if(isIn){// Eğer içerideysek;
+                    if(deep == 0){// derinlik 0 ise;
+                        isIn = false;// Dışarı çıktığımızı işâretle
+                        break;// İşlem tâmam, dışarı çık
+                    }
+                    else
+                        deep--;
+                }
+                else{// İçeride olmadığımız hâlde kapanış karakteri geldiyse;
+                    return null;// Hatâlı işlem..
+                }
+            }
+            if(isIn)
+                sB.append(c);
+        }
+        return sB.toString();
+    }
+    /**
+     * {@code Map} için jenerik tip ismindeki anahtar - değer tip ismini ayırır<br>
+     * Jenerik tip içinde başka jenerik tip olabildiği için {@code String}
+     * sınıfının şu {@code split()} metodu istenilen sonucu üretmiyor<br>
+     * Bu metot ise parçalama işlemini doğru virgülü bularak yapıyor<br>
+     * Kullanırken dikkat edilmelidir:<br>
+     * {@code Map<Map<String, String>, String>} girdisinin anahtar ve değer
+     * tiplerinin isimleri isteniyorsa şu metîn verilmelidir:<br>
+     * {@code Map<String, String>, String}
+     * Eğer verilen metîn hatâ içeriyorsa {@code null} döndürülebilir
+     * @return Birincisi anahtar, ikinci değer tipi olmak üzere jenerik tipler
+     */
+    private String[] splitGenericTypeNameByRightCommaForMap(String genericTypeName){
+        boolean isIn = false;
+        boolean addToVal = false;
+        int depth = 0;
+        StringBuilder key = new StringBuilder();
+        StringBuilder val = new StringBuilder();
+        for(char c : genericTypeName.toCharArray()){
+            if(c == ','){
+                if(!isIn){
+                    addToVal = true;
+                    continue;
+                }
+            }
+            if(!addToVal)
+                key.append(c);
+            else
+                val.append(c);
+            if(c == '<'){
+                if(!isIn){
+                    isIn = true;
+                }
+                depth++;
+            }
+            else if(c == '>'){
+                if(depth == 1)
+                    isIn = false;
+                depth--;
+            }
+        }
+        return new String[]{key.toString().trim(), val.toString().trim()};
     }
 
 // ERİŞİM YÖNTEMLERİ:
