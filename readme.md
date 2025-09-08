@@ -107,7 +107,7 @@
 - Bunun yerine yeni bir `Reflector` nesnesi de oluşturabilirsiniz.
 - `Reflector.getService()` ile gelen statik nesne bir küresel değişkeni manipüle etmediğinden "thread-safe" olarak değerlendirilebilir.
 
-#### 3) Kullanım : Metotlar, İşlevler
+#### 3) Kullanım : Metotlar, İşlevler (Genel)
 
 - Bu bölümde en çok kullanlan bâzı işlevlerin nasıl kullanıldığına, ardından düşük seviye işlemler için sağlanan metotlara değinilecektir inşâAllâh..
 
@@ -175,7 +175,7 @@
   
   ```java
   String strDate = "2025-05-12 12:34:32";
-  LocalDateTime date = ref.getCastedObject(LocalDateTime.class, strDate);
+  LocalDateTime date= ref.getCastedObject(LocalDateTime.class, strDate);
   System.out.println("Date : " + date);// Date : 2025-05-12T12:34:32
   
   // Târih saat nesnesini SQL veyâ ISO formatında metîn olarak alın:
@@ -282,11 +282,11 @@
   
   - `CODING_STYLE codingStyle` : Sınıfın kodlanma biçimi. Bu, "setter" metotlarının isimlerinin çıkartılması için alınır.  
 
--  Kullanım örneği:
+- Kullanım örneği:
   
   ```java
   Map<String, Object> fieldValues =
-                      new HashMap<String, Object>();
+                     new HashMap<String, Object>();
   User u = new User("Mehmet Âkif");
   fieldValues.put("origin", "Turkish");
   List<String> li = new ArrayList<String>();
@@ -308,7 +308,7 @@
 
 - İsterseniz veri zerk edilerek, isterseniz de veri zerk edilmeden nesne örnekleri oluşturabilirsiniz.
 
-- Kullanıcı tanımlı sınıfların nesne örneklerinin oluşturulması için bir parametresiz yapıcı metoda ihtiyaçları vardır.
+- Kullanıcı tanımlı sınıfların nesne örneklerinin oluşturulması için **parametresiz yapıcı metoda ihtiyaç vardır**.
 
 - Bunun için `produceInstance()` ve `produceInjectedObject()` metotlarını kullanabilirsiniz. Birincisi veri zerk edilmeden bir sınıf örneği oluşturmak için, ikincisi ise veri zerk edilerek sınıf örneği (nesne) oluşturmak için kullanılır:
   
@@ -350,19 +350,174 @@
   int[][] matrix = ref.produceArrayReturnAsObject(int[][].class, 4);
   System.out.println("matrix.length : " + matrix.length);
   
-  // 
+  // Veri zerk edilmiş dizi oluşumu:
+  List<Integer> li = new ArrayList<Integer>();
+  li.add(34);
+  li.add(594);
+  int[] arr = ref.produceInjectedArray(int[].class, li);
+  for(int sayac = 0; sayac < arr.length; sayac++){
+      System.out.print("[" + sayac + "] = " + arr[sayac] + "\t");
+  }// [0] = 34    [1] = 594    
   ```
 
-- .
+- Zerk edilmiş dizi üretimi için verilen verinin tipi dizi veyâ liste olmalıdır. Bu dizi veyâ listenin taşıdığı verilerin tipi ise çeşitli olabilir.
 
-> ***NOT :*** Temel veri tipleri için `produceArrayReturnAsObject()` metodunun kullanılmasının sebebi `int[].class` sınıfının üst sınıfının `Object` olmamasından dolayı `T`'ye çevrilememesidir.
+> ***NOT :*** Temel veri tipleri için `produceArrayReturnAsObject()` metodunun kullanılmasının sebebi `int[].class` sınıfının `T[]` tipine çevrilememesidir. Bunun sebebi de `T` generic tipinin `Object` üst sınıf sınırının `Object` olması ve temel veri tiplerinin `Object`'in alt sınıfı olmamasıdır.
 
-- .
+- ..
 
-- .
+###### 3.5.3) Liste örnekleri oluşturma
 
-- .
+- Eldeki verilerin zerk edildiği liste oluşturulması da basittir:
+  
+  ```java
+  long[] arr = new long[]{234L, 2L};
+  List<Double> list = ref.produceInjectedList(arr);
+  System.out.println("list : " + list);
+  ```
 
-- .
+###### 3.5.4) Enum sınıf örneği oluşturma
+
+- `enum` bir sınıfın örneğini almak için `produceInstance()` metodunu kullanabilirsiniz:
+  
+  ```java
+  CODING_STYLE codingStyle = ref.produceInstance(CODING_STYLE.class);
+  System.out.println("codingStyle : " + codingStyle);
+  // codingStyle : CAMEL_CASE
+  ```
+
+- Eğer bir metîn değeri vererek, hedef `enum` değerini almak istiyorsanız `getEnumByData()` metodunu kullanınız:
+  
+  ```java
+  CODING_STYLE val= ref.getEnumByData(CODING_STYLE.class, "SNAKE_CASE");
+  System.out.println("val : " + val);// val : SNAKE_CASE
+  ```
+
+- `enum` sınıfının örneğinin oluşturulabilmesi için `enum` sınıfının erişim belirtecinin uygun olması gerekmektedir.
+
+- `produceInstance()` metodu bir `enum` değeri döndürürken alınan değerler içerisindeki ilk değeri döndürür.
+
+##### 3.6) Sınıfın Tipini Sorgulama
+
+- Bir sınıfın bir sayı tipinde olup olmadığını sorgulamak, `Map` olup olmadığını sorgulamak, târih - saat veri tiplerinden birisi olup olmadığını sorgulamak, verilen sınıfın alt sınıfı olup, olmadığını sorgulamak veyâ temel veri tipleri ve sarmalayıcıları ve çok kullanılan veri tipleri hâricinde bir sınıf olup olmadığını sorgulamak için bu kütüphâne kullanılabilir:
+  
+  ```java
+  Class<?> cls = Integer.class;
+  System.out.println(ref.isAboutDateTime(cls));// false
+  System.out.println(ref.isAboutNumber(cls));// true
+  System.out.println(ref.isCollection(cls));// false
+  System.out.println(ref.isMap(cls));// false
+  System.out.println(ref.isNotUserDefinedClass(cls));// true
+  ```
+
+- ..
+
+#### 4) Düşük Seviyeli Kullanım
+
+- Düşük seviyeli kullanımda yapabileceğiniz şeylerden bâzıları şunlardır:
+  
+  - **Verilen bir `Method` nesnesini çalıştırma :** Verilen metodu çalıştırarak gelen çıktıyı öğrenebilirsiniz. Metodun hatâ fırlatıp, fırlatmadığını da öğrenmek istiyorsanız 5 parametre alan `invokeMethod()` metodunu kullanınız:
+    
+    ```java
+    User user = new User();
+    Method getter = ref.getSpecialMethod(User.class, "id",
+                        METHOD_TYPES.GET, CODING_STYLE.CAMEL_CASE);
+    // Metodu çalıştırma:
+    Object id = ref.invokeMethod(user, getter, null, true);
+    //Nesne, metot, metoda verilecek girdiler, erişimi zorlama bayrağı
+    
+    // Gelen 'null' değerin metodun oluşan hatâdan dolayı mı,
+    // yoksa metodun mu 'null' döndürdüğünü sorgulamak isterseniz:
+    Map<String, Object> res = new HashMap<String, Object>();
+    id = ref.invokeMethod(user, getter, null, true, res);
+    
+    System.out.println("Metot çalıştırıldı mı : "+ res.get("result"));
+    // Metot çalıştırıldı mı : true
+    ```
+  
+  - **Alanları `Field` nesnesi olarak alma :** Bu, `getFields()` metotlarıyla yapılmaktadır. İki adet `getFields()` metodu vardır. Birisi alınacak alanların isimlerini liste olarak vermenize imkân tanırken, tüm alanları alır. Alanları alırken, hedef sınıfın üst sınıflarının da taranmasını isterseniz `scanSuperClasses` parametresine `true` değeri veriniz:
+    
+    ```java
+    // Tüm alanları alma:
+    List<Field> liFls = ref.getFields(Author.class, true);
+    
+    // Yalnızca belirtilen alanları alma:
+    List<String> names = new ArrayList<String>();
+    names.add("book");names.add("id");names.add("age");
+    liFls = ref.getFields(Author.class, names, true);
+    ```
+  
+  - **Parametresiz yapıcı metodu `Constructor` nesnesi olarak alma :** Hedef sınıfın parametresiz yapıcı metodu `java.lang.reflect.Constructor` nesnesi olarak alınabilir:
+    
+    ```java
+    Constructor noParamCs =
+                    ref.getConstructorForNoParameter(Author.class);
+    ```
+  
+  - **Bir Collection nesnesinin derinliğini alma :** Bu işlem için nesne içerisindeki tüm alt nesneler taranır ve en yüksek derinlik, `Collection` nesnesinin derinliği olarak döndürülür:
+    
+    ```java
+    List<List<String>> li = new ArrayList<List<String>>();
+    List<String> element1 = new ArrayList<String>();
+    element1.add("Bismillâh..");
+    li.add(element1);
+    int depth = ref.getDimensionOfCollection(li);
+    System.out.println("derinlik : " + depth);// derinlik : 2
+    ```
+  
+  - **Verilen dosya yolu altındaki veyâ uygulama sınıf yolu altındaki sınıfları alma :**
+    
+    ```java
+    // Uygulamadaki sınıfları alma:
+    List<Class<?>> appClasses = ref.getClassesOnTheAppPath();
+    
+    // Belli bir dosya yolundaki sınıfları alma:
+    List<Class<?>> in = ref.getClassesOnThePath(new File("/tmp/"));
+    ```
+  
+  - **Temel sınıfların sarmalayıcı sınıfını alma :** Bunun için `getWrapperClassFromPrimitiveClass()` metodu kullanılır:
+    
+    ```java
+    Class<?> wrapper=ref.getWrapperClassFromPrimitiveClass(int.class);
+    System.out.println("Sarmalayıcı sınıf : " + wrapper);
+    // Sarmalayıcı sınıf : class java.lang.Integer
+    ```
+  
+  - **Özel metotları (getter / setter) alma :** Verilen alanın verilen kodlama biçimine uygun olarak kodlanmış özel metodu `java.lang.reflect.Method` nesnesi olarak döndürülür:
+    
+    ```java
+    Method setter = ref.getSpecialMethod(
+                                User.class, "id", METHOD_TYPES.SET,
+                                CODING_STYLE.CAMEL_CASE, true);
+    ```
+  
+  - Eğer bu işlem esnasında üst sınıfların taranmasını istemezseniz son parametre olan `scanSuperClasses` parametresine `false` verebilirsiniz.
+  
+  - **Metotları alma :** Bunun için `getMethods()` metotları kullanılır. İki ve üç parametre alan iki farklı sürümü bulunmaktadır. İlk sürümünde sınıf (`cls`) ve üst sınıfları tarama bayrağı (`scanSuperClasses`) parametreleri yer almaktadır. Bu, sınıf içerisindeki tüm metotları döndürür. İkinci metot ise, yalnızca ismi verilen metotları döndürür:
+    
+    ```java
+    List<Method> all = ref.getMethods(User.class, true);
+    
+    // Metot isimleri verilen metotları alma:
+    List<String> names = new ArrayList<String>();
+    names.add()
+    List<Method> numericals = ref.getMethods(User.class, names, true);
+    ```
+  
+  - **Bir alanın olup olmadığını sorgulama :** Bunun için `checkFieldIsExist()` metodu kullanılır:
+    
+    ```java
+    boolean isHasId = ref.checkFieldIsExist(User.class, "id");
+    ```
+  
+  - **Sınıf içerisinde belli bir bildirim (notasyon, annotation) ile süslenmiş alan(lar)ı alma :**
+    
+    ```java
+    List<String> annotateds = ref.getAnnotatedFieldsByGivenAnnotation(
+                                        User.class, Column.class);
+    // İlk parametre sınıfın kendisi, ikinci parametre notasyondur
+    ```
+
+- Bunun dışında koleksiyonun belli bir derinlikten sonrasının hesaplanması için `findDepthWhole()` metodu ve başka yardımcı metotlar da vardır. Yüksek seviyede kullanımda kullanılan metotların kullandığı alt metotların bir kısmı da erişilebilirdir.
 
 - ..
